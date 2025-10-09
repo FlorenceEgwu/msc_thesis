@@ -1,0 +1,19 @@
+# profiles/slurm/config.yaml
+# Works with Snakemake's built-in Slurm executor (>=7.20).
+executor: slurm
+jobs: 200
+use-conda: true
+conda-frontend: mamba
+rerun-incomplete: true
+printshellcmds: true
+latency-wait: 180
+default-resources:
+  - threads=1
+  - mem_mb=8000
+  - runtime=2h
+  - slurm_partition=short           # change to partition value for your cluster
+  - slurm_account=                  # optional, set if cluster requires it
+  - slurm_extra=                    # e.g., "--qos=normal"
+restart-times: 1
+max-status-checks-per-second: 10
+keep-going: true

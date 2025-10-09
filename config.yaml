@@ -1,0 +1,66 @@
+# Global defaults (overridable per dataset and per sample)
+defaults:
+  mapper: "STAR"              # STAR or HISAT2
+  threads: 8
+  strandedness: "auto"        # auto, unstranded, forward, reverse
+  trim: false
+  star:
+    sjdbOverhang: 100
+    outFilterMismatchNoverLmax: 0.03
+    outSAMtype: ["BAM", "SortedByCoordinate"]
+    twopassMode: "Basic"      # Basic or None
+  hisat2:
+    knownSplicesiteFile: null
+    score_min: "L,0,-0.2"
+
+# Datasets (group-level defaults + references + overrides)
+datasets:
+  human_bulk_2025:
+    organism: "human"
+    ref: "refs/hg38/genome.fa"
+    gtf: "refs/hg38/annotation.gtf"
+    star_index_dir: "refs/hg38/STARindex"
+    hisat2_index_prefix: "refs/hg38/hisat2/genome"
+    defaults:
+      mapper: "STAR"
+      threads: 12
+      star:
+        twopassMode: "Basic"
+
+  mouse_singlecell_pilot:
+    organism: "mouse"
+    ref: "refs/mm39/genome.fa"
+    gtf: "refs/mm39/annotation.gtf"
+    star_index_dir: "refs/mm39/STARindex"
+    hisat2_index_prefix: "refs/mm39/hisat2/genome"
+    defaults:
+      mapper: "HISAT2"
+      hisat2:
+        score_min: "L,0,-0.4"
+
+# Output locations
+outdir: "results"
+tmpdir: "tmp"
+
+# QC/AS toggles
+qc:
+  fastqc: true
+  multiqc: true
+as:
+  enabled: true
+  tool: rmats
+  design_tsv: "design.tsv"   # sample-to-condition map (see below)
+  read_length: 101           # to be set to actual read length
+  library_type: "fr-firststrand"   # fr-firststrand | fr-secondstrand | unstranded
+
+simulate:
+  enabled: true
+  per_dataset:
+    human_bulk_2025:
+      n_samples: 2
+      reads_per_sample: 1000000
+      read_length: 101
+      paired_end: true
+      outdir: "data/sim/human_bulk_2025"
+      # If absent, we'll build it as refs/<genome>/transcripts.fa from your GTF+FA
+      transcript_fa: "refs/hg38/transcripts.fa"

@@ -1,0 +1,6 @@
+sample	dataset	read1	read2	layout	mapper	threads	strandedness	star.twopassMode	hisat2.score_min
+A1	human_bulk_2025	data/A1_R1.fq.gz	data/A1_R2.fq.gz	PE	STAR	16	auto	Basic	
+A2	human_bulk_2025	data/A2_R1.fq.gz	data/A2_R2.fq.gz	PE				# inherits dataset/global defaults
+B1	mouse_singlecell_pilot	data/B1_R1.fq.gz		SE	HISAT2	8	reverse		L,0,-0.6
+B2	mouse_singlecell_pilot	data/B2_R1.fq.gz		SE				# inherits dataset/global defaults
+sim1	human_bulk_2025	data/sim/human_bulk_2025/sample1_1.fq.gz	data/sim/human_bulk_2025/sample1_2.fq.gz	PE	STAR	8	auto

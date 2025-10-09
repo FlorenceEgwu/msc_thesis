@@ -1,0 +1,8 @@
+name: refs_env
+channels: [conda-forge, bioconda, defaults]
+dependencies:
+  - star
+  - hisat2
+  - samtools
+  - python=3.10
+  - gffread
