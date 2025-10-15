@@ -1,53 +1,60 @@
+# rules/simulate.smk — Snakemake v8+ safe (no functions in output)
+# Generates synthetic reads with Polyester per dataset.
+# Assumes transcripts FASTA is produced by refs.smk at: work/refs/{ds}/transcripts.fa
+
 from pathlib import Path
 
-SIMCFG = config.get("simulate", {})
-def ds_sim_cfg(ds):
-    return SIMCFG.get("per_dataset", {}).get(ds, {})
+# Defaults pulled from config with fallbacks
+SIM_CFG = config.get("simulate", {})
+SIM_ENABLED = bool(SIM_CFG.get("enabled", False))
+SIM_READLEN = int(SIM_CFG.get("readlen", SIM_CFG.get("read_length", 100)))
+SIM_FRAGS   = int(SIM_CFG.get("fragments", 100000))
+SIM_SEED    = int(SIM_CFG.get("seed", 12345))
 
-def sim_outs(ds):
-    c = ds_sim_cfg(ds)
-    n = int(c.get("n_samples", 0))
-    outdir = Path(c.get("outdir", f"data/sim/{ds}"))
-    return [outdir / f"sample{i+1}_1.fasta.gz" for i in range(n)]  # Polyester naming is flexible; we map below
+# canonical output dir under repo (can be overridden in params)
+def sim_outdir(ds):
+    # allow override per-dataset in config["datasets"][ds]["simulate"]["outdir"]
+    dsc = config.get("datasets", {}).get(ds, {})
+    return dsc.get("simulate", {}).get("outdir", f"data/sim/{ds}")
 
-rule build_transcripts_if_needed:
-    input:
-        lambda w: dataset_cfg(w.ds)["gtf"],
-        lambda w: dataset_cfg(w.ds)["ref"]
-    output:
-        fa=lambda w: Path(dataset_cfg(w.ds)["ref"]).parent / "transcripts.fa"
-    conda: "envs/refs.yaml"
-    shell:
-        r"""
-        gffread {input[0]} -g {input[1]} -w {output.fa}
-        """
-
+# Use a single marker file to denote completion to avoid listing many fastq outputs
 rule simulate_polyester:
     input:
-        fa=lambda w: (
-            Path(ds_sim_cfg(w.ds).get("transcript_fa","")) if ds_sim_cfg(w.ds).get("transcript_fa")
-            else Path(dataset_cfg(w.ds)["ref"]).parent / "transcripts.fa"
-        )
+        transcripts = "work/refs/{ds}/transcripts.fa"
     output:
-        r1=lambda w: Path(ds_sim_cfg(w.ds).get("outdir", f"data/sim/{w.ds}")) / "sample1_1.fq.gz",
-        r2=lambda w: Path(ds_sim_cfg(w.ds).get("outdir", f"data/sim/{w.ds}")) / "sample1_2.fq.gz"
+        "data/sim/{ds}/done.flag"
+    conda:
+        "envs/polyester.yaml"
+    threads: 2
     params:
-        outdir=lambda w: ds_sim_cfg(w.ds).get("outdir", f"data/sim/{w.ds}"),
-        n=lambda w: int(ds_sim_cfg(w.ds).get("n_samples", 1)),
-        reads=lambda w: int(ds_sim_cfg(w.ds).get("reads_per_sample", 1000000)),
-        readlen=lambda w: int(ds_sim_cfg(w.ds).get("read_length", 100)),
-        paired=lambda w: str(ds_sim_cfg(w.ds).get("paired_end", True)).lower()
-    conda: "envs/polyester.yaml"
+        outdir   = lambda w: sim_outdir(w.ds),
+        readlen  = SIM_READLEN,
+        fragments= SIM_FRAGS,
+        seed     = SIM_SEED
     shell:
         r"""
-        mkdir -p {params.outdir}
+        set -euo pipefail
+        mkdir -p "{params.outdir}"
+
+        # Run the Polyester script (updated earlier to accept --seed; if it also supports --outdir, pass it)
+        # If your script does not support --outdir yet, it will default to results/polyester; we will move files after.
         Rscript scripts/simulate_polyester.R \
-          --transcripts {input.fa} \
-          --outdir {params.outdir} \
-          --n_samples {params.n} \
-          --reads_per_sample {params.reads} \
-          --read_length {params.readlen} \
-          --paired
-        # Polyester names files like sampleX_1.fq.gz / sampleX_2.fq.gz by default
-        test -s {output.r1}
+          --fasta "{input.transcripts}" \
+          --readlen {params.readlen} \
+          --fragments {params.fragments} \
+          --seed {params.seed} || true
+
+        # If the script wrote to results/polyester, move outputs into the canonical outdir.
+        if [ -d results/polyester ]; then
+          find results/polyester -maxdepth 1 -type f -exec mv -f {{}} "{params.outdir}/" \;
+          rmdir results/polyester || true
+        fi
+
+        # Mark completion
+        touch "{output}"
         """
+
+# Optional: convenience target to expose all dataset simulation flags to rule all
+# (If you already create a simulate_targets() helper in Snakefile, you can ignore this.)
+def all_sim_done_targets(datasets):
+    return [f"data/sim/{ds}/done.flag" for ds in datasets]

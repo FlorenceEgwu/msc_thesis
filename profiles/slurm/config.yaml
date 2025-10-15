@@ -3,7 +3,6 @@
 executor: slurm
 jobs: 200
 use-conda: true
-conda-frontend: mamba
 rerun-incomplete: true
 printshellcmds: true
 latency-wait: 180

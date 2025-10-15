@@ -1,6 +1,0 @@
-name: hisat2_env
-channels: [conda-forge, bioconda, defaults]
-dependencies:
-  - hisat2
-  - samtools
-  - python=3.10
