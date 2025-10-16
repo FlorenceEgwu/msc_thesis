@@ -7,23 +7,23 @@ supports local and Slurm (HPC) execution; uses conda/mamba environments.
 
 ##High-level Structure
 
--Snakefile — main workflow entry point and rules includes.
+- Snakefile — main workflow entry point and rules includes.
 
--config.yaml — central configuration (samples, references, parameters).
+- config.yaml — central configuration (samples, references, parameters).
 
 -envs/ — conda environment specs (e.g., refs.yaml, star.yaml, hisat2.yaml, rmats.yaml).
 
--profiles/ — Snakemake profiles: local/ and slurm/.
+- profiles/ — Snakemake profiles: local/ and slurm/.
 
--rules/ — modular rule files (aligners, QC, post‑processing, splicing).
+- rules/ — modular rule files (aligners, QC, post‑processing, splicing).
 
--scripts/ — helper scripts (pre/post processing, plotting).
+- scripts/ — helper scripts (pre/post processing, plotting).
 
--samples.tsv — sample sheet (IDs, groups/conditions, fastq paths or SRR accessions).
+- samples.tsv — sample sheet (IDs, groups/conditions, fastq paths or SRR accessions).
 
--design.tsv — experimental design metadata to complement samples.tsv.
+- design.tsv — experimental design metadata to complement samples.tsv.
 
--README.md — quickstart, requirements, and run commands.
+- README.md — quickstart, requirements, and run commands.
 
 
 ##Quickstart
@@ -32,11 +32,11 @@ supports local and Slurm (HPC) execution; uses conda/mamba environments.
 - Mamba/Conda, Snakemake ≥7.32 (recommended), conda-lock (optional)
 
 ### Setup
-```bash
-mamba env create -f envs/refs.yaml
-mamba env create -f envs/star.yaml
-mamba env create -f envs/hisat2.yaml
-mamba env create -f envs/rmats.yaml```
+bash
+`mamba env create -f envs/refs.yaml`
+`mamba env create -f envs/star.yaml`
+`mamba env create -f envs/hisat2.yaml`
+`mamba env create -f envs/rmats.yaml`
 
 ##Local run (example)
 `snakemake --profile profiles/local --use-conda -j 4`
@@ -47,16 +47,16 @@ mamba env create -f envs/rmats.yaml```
 
 ##Expected Inputs
 
--FASTQ files or accession-driven fetch (as defined in samples.tsv).
+- FASTQ files or accession-driven fetch (as defined in samples.tsv).
 
--Reference genome + annotation (configured via config.yaml and envs/refs.yaml).
+- Reference genome + annotation (configured via config.yaml and envs/refs.yaml).
 
--Design matrix (design.tsv) for downstream DE/AS analyses.
+- Design matrix (design.tsv) for downstream DE/AS analyses.
 
 ##Outputs (typical)
 
--Aligner-specific BAMs/metrics (STAR/HISAT2).
+- Aligner-specific BAMs/metrics (STAR/HISAT2).
 
--Splicing event tables and summaries (rMATS).
+- Splicing event tables and summaries (rMATS).
 
--QC reports and intermediate logs.
+- QC reports and intermediate logs.
