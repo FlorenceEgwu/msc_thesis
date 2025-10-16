@@ -1,11 +1,11 @@
-##Purpose
+## Purpose
 
 Snakemake-based RNA‑Seq pipeline for the thesis: "Enhanced RNA‑Seq data analysis workflow in molecular biotechnology:
 Parameter refinements of mappers for improved accuracy in alternative splicing detection".
 Focus on STAR and HISAT2 mapping with rMATS for alternative splicing; 
 supports local and Slurm (HPC) execution; uses conda/mamba environments.
 
-##High-level Structure
+## High-level Structure
 
 - Snakefile — main workflow entry point and rules includes.
 
@@ -26,7 +26,7 @@ supports local and Slurm (HPC) execution; uses conda/mamba environments.
 - README.md — quickstart, requirements, and run commands.
 
 
-##Quickstart
+## Quickstart
 
 ### Requirements
 - Mamba/Conda, Snakemake ≥7.32 (recommended), conda-lock (optional)
@@ -38,14 +38,14 @@ bash
 `mamba env create -f envs/hisat2.yaml`
 `mamba env create -f envs/rmats.yaml`
 
-##Local run (example)
+## Local run (example)
 `snakemake --profile profiles/local --use-conda -j 4`
 
-##Slurm (HPC)
+## Slurm (HPC)
 
 `snakemake --profile profiles/slurm --use-conda --rerun-incomplete`
 
-##Expected Inputs
+## Expected Inputs
 
 - FASTQ files or accession-driven fetch (as defined in samples.tsv).
 
@@ -53,7 +53,7 @@ bash
 
 - Design matrix (design.tsv) for downstream DE/AS analyses.
 
-##Outputs (typical)
+## Outputs (typical)
 
 - Aligner-specific BAMs/metrics (STAR/HISAT2).
 
