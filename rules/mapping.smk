@@ -14,7 +14,7 @@ TMPDIR = "work/tmp"
 
 # Helpers
 def sample_dataset(w):
-    return sample_cfg(SAMPLE_ROWS[w.sample])["dataset"]
+    return sample_cfg(SAMPLE_ROWS[w.sample]).get("dataset")
 
 def is_pe(w):
     return sample_cfg(SAMPLE_ROWS[w.sample]).get("layout", "PE").upper() == "PE"
@@ -22,8 +22,8 @@ def is_pe(w):
 # STAR mapping
 rule map_star:
     input:
-        r1 = lambda w: SAMPLE_ROWS[w.sample]["read1"],
-        r2 = lambda w: SAMPLE_ROWS[w.sample]["read2"],
+        r1 = lambda w: SAMPLE_ROWS[w.sample].get("read1"),
+        r2 = lambda w: SAMPLE_ROWS[w.sample].get("read2"),
         star_index = lambda w: f"work/refs/{sample_dataset(w)}/STARindex"
     output:
         bam = f"{OUTDIR}/mapping/{{sample}}.bam"
@@ -52,8 +52,8 @@ rule map_star:
 # HISAT2 mapping
 rule map_hisat2:
     input:
-        r1 = lambda w: SAMPLE_ROWS[w.sample]["read1"],
-        r2 = lambda w: SAMPLE_ROWS[w.sample]["read2"],
+        r1 = lambda w: SAMPLE_ROWS[w.sample].get("read1"),
+        r2 = lambda w: SAMPLE_ROWS[w.sample].get("read2"),
         # depend on the hisat2 index "done" marker from refs.smk so ordering is correct
         hisat2_done = lambda w: f"work/refs/{sample_dataset(w)}/hisat2/.done"
     output:

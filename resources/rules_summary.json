@@ -1,0 +1,148 @@
+[
+  {
+    "file": "Snakefile",
+    "rule": "all",
+    "inputs": [],
+    "outputs": [],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/mapping.smk",
+    "rule": "map_star",
+    "inputs": [
+      "read1",
+      "read2",
+      "work/refs/{sample_dataset(w)}/STARindex"
+    ],
+    "outputs": [
+      "{OUTDIR}/mapping/{{sample}}.bam"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/mapping.smk",
+    "rule": "map_hisat2",
+    "inputs": [
+      "read1",
+      "read2",
+      "work/refs/{sample_dataset(w)}/hisat2/.done"
+    ],
+    "outputs": [
+      "{OUTDIR}/mapping/{{sample}}.bam"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/mapping.smk",
+    "rule": "map_reads",
+    "inputs": [
+      "{OUTDIR}/mapping/{{sample}}.bam"
+    ],
+    "outputs": [],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/qc.smk",
+    "rule": "fastqc",
+    "inputs": [
+      "read1",
+      "read2",
+      "read2"
+    ],
+    "outputs": [
+      "results/fastqc/{sample}.done"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/qc.smk",
+    "rule": "multiqc",
+    "inputs": [
+      "results/fastqc/{sample}.done"
+    ],
+    "outputs": [
+      "results/multiqc/multiqc_report.html"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/refs.smk",
+    "rule": "link_refs",
+    "inputs": [],
+    "outputs": [
+      "work/refs/{ds}/genome.fa",
+      "work/refs/{ds}/annotation.gtf"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/refs.smk",
+    "rule": "faidx",
+    "inputs": [
+      "work/refs/{ds}/genome.fa"
+    ],
+    "outputs": [
+      "work/refs/{ds}/genome.fa.fai"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/refs.smk",
+    "rule": "star_index",
+    "inputs": [
+      "work/refs/{ds}/genome.fa",
+      "work/refs/{ds}/annotation.gtf",
+      "work/refs/{ds}/genome.fa.fai"
+    ],
+    "outputs": [
+      "work/refs/{ds}/STARindex"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/refs.smk",
+    "rule": "hisat2_index",
+    "inputs": [
+      "work/refs/{ds}/genome.fa",
+      "work/refs/{ds}/genome.fa.fai"
+    ],
+    "outputs": [
+      "work/refs/{ds}/hisat2/.done"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/refs.smk",
+    "rule": "transcripts_fa",
+    "inputs": [
+      "work/refs/{ds}/genome.fa",
+      "work/refs/{ds}/annotation.gtf"
+    ],
+    "outputs": [
+      "work/refs/{ds}/transcripts.fa"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/simulate.smk",
+    "rule": "simulate_polyester",
+    "inputs": [
+      "work/refs/{ds}/transcripts.fa"
+    ],
+    "outputs": [
+      "data/sim/{ds}/done.flag"
+    ],
+    "logs": []
+  },
+  {
+    "file": "rules/rules/splicing.smk",
+    "rule": "rmats",
+    "inputs": [
+      "work/refs/{ds}/annotation.gtf"
+    ],
+    "outputs": [
+      "results/rmats/{ds}/{g1}_vs_{g2}/MATS_output/done.flag"
+    ],
+    "logs": []
+  }
+]

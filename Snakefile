@@ -5,6 +5,41 @@ from pathlib import Path
 
 configfile: "config.yaml"
 
+# ---- samples.tsv → SAMPLE_ROWS ----
+# Expected columns (min): sample, read1
+# Optional: read2, dataset, layout, threads, etc.
+SAMPLES = pd.read_csv("samples.tsv", sep="\t", dtype=str).fillna("")
+
+# Dict keyed by sample -> row dict
+SAMPLE_ROWS = {
+    row["sample"]: {k: (v if v is not None else "") for k, v in row.items()}
+    for row in SAMPLES.to_dict(orient="records")
+}
+
+# Fail early if duplicates or missing
+if len(SAMPLE_ROWS) != len(SAMPLES):
+    dupes = SAMPLES["sample"][SAMPLES["sample"].duplicated()].tolist()
+    raise ValueError(f"Duplicate sample IDs in samples.tsv: {dupes}")
+if not all("read1" in r and r["read1"] for r in SAMPLE_ROWS.values()):
+    missing = [k for k, r in SAMPLE_ROWS.items() if not r.get("read1")]
+    raise ValueError(f"Missing read1 for samples: {missing}")
+
+# ---- config merges for per-sample cfg ----
+def sample_cfg(row: dict) -> dict:
+    dataset = row.get("dataset", "") or "dataset"
+    defaults = (config.get("defaults") or {})
+    datasets = (config.get("datasets") or {})
+    merged = {}
+    merged.update(defaults)
+    merged.update(datasets.get(dataset, {}))
+    # normalize a few expected keys
+    merged.setdefault("threads", 8)
+    merged.setdefault("layout", "PE")
+    merged.setdefault("star", {})
+    merged.setdefault("hisat2", {"score_min": "L,0,-0.2"})
+    return merged
+
+
 # Load rule modules FIRST so their symbols/paths exist when we reference them
 include: "rules/refs.smk"
 include: "rules/mapping.smk"
