@@ -15,18 +15,6 @@ defaults:
 
 # Datasets (group-level defaults + references + overrides)
 datasets:
-  human_bulk_2025:
-    organism: "human"
-    ref: "refs/hg38/genome.fa"
-    gtf: "refs/hg38/annotation.gtf"
-    star_index_dir: "refs/hg38/STARindex"
-    hisat2_index_prefix: "refs/hg38/hisat2/genome"
-    defaults:
-      mapper: "STAR"
-      threads: 12
-      star:
-        twopassMode: "Basic"
-
   mouse_singlecell_pilot:
     organism: "mouse"
     ref: "refs/mm39/genome.fa"
