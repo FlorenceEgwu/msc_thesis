@@ -1,6 +1,26 @@
+# R specific files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
-Snakefile2
+
+# Snakemake files
+Snakefile
 .snakemake/
+
+# General files
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.class
+*.jar
+*.log
+
+# Ignore output directories
+reference/*index*/
+data/*
+logs/*
+Log*
+Aligned.sortedByCoord.out.bam
+screenlog.*
