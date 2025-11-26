@@ -13,9 +13,9 @@
 # ==== CONFIGURATION ====
 sciezka_star=${HOME}/pl0296-02/project_data/STAR-2.7.11b/source
 data_dir=data/input/fastq_small
-out_dir=data/output/bam_star_171125
+out_dir=data/output/bam_star_221125
 sufix=".fastq.gz"
-INDEX_DIR=reference/index
+INDEX_DIR=reference/star_index_chr19_window
 
 mkdir -p ${out_dir} logs
 
