@@ -14,7 +14,7 @@
 HISAT2_DIR=${HOME}/pl0296-02/project_data/hisat2-2.2.1
 SAMTOOLS_DIR=${HOME}/pl0296-02/project_data/samtools-1.19.2
 data_dir=data/input/fastq_small
-out_dir=data/output/bam_hisat2_221125
+out_dir=data/output/bam_hisat2
 sufix=".fastq.gz"
 INDEX_PREFIX=reference/hisat2_index/chr19_4300000-4800000
 
