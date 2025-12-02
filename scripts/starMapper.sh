@@ -11,11 +11,11 @@
 #SBATCH --error=logs/map_star_%j.err
 
 # ==== CONFIGURATION ====
-sciezka_star=${HOME}/pl0296-02/project_data/STAR-2.7.11b/source
+STAR_DIR=${HOME}/pl0296-02/project_data/STAR-2.7.11b/source
 data_dir=data/input/fastq_small
-out_dir=data/output/bam_star_171125
+out_dir=data/output/bam_star
 sufix=".fastq.gz"
-INDEX_DIR=reference/index
+INDEX_DIR=reference/star_index_chr19_window
 
 mkdir -p ${out_dir} logs
 
@@ -29,7 +29,7 @@ for f in ${data_dir}/SRR*_2${sufix}; do
     echo "🧩 Processing sample: ${SAMPLE}"
     echo "   Reads: ${PATH_in}_1${sufix} and ${PATH_in}_2${sufix}"
 
-    ${sciezka_star}/STAR \
+    ${STAR_DIR}/STAR \
         --genomeDir ${INDEX_DIR} \
         --outSAMtype BAM SortedByCoordinate \
         --genomeLoad NoSharedMemory \

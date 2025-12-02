@@ -13,8 +13,8 @@
 
 sciezka_star=${HOME}/pl0296-02/project_data/STAR-2.7.11b/source
 FASTA=reference/chr19_4300000-4800000.fa
-GTF=reference/chr19_4300000-4800000.gtf
-INDEX_DIR=reference/index
+GTF=reference/chr19_4300000-4800000_fixed.gtf
+INDEX_DIR=reference/star_index_chr19_window
 mkdir -p ${INDEX_DIR} logs
 
 # If the FASTA and GTF files are compressed, uncomment the following lines to decompress them
@@ -25,5 +25,9 @@ ${sciezka_star}/STAR --runThreadN 8 \
 	--runMode genomeGenerate \
 	--genomeDir ${INDEX_DIR} \
 	--genomeFastaFiles ${FASTA} \
-	--sjdbGTFfile ${GTF}
+	--sjdbGTFfile ${GTF}\
+	--sjdbOverhang 149 \
+  	--genomeSAindexNbases 8 // adjust this value based on the genome size
+
+
 

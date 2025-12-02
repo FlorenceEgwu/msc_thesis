@@ -14,28 +14,13 @@
 HISAT2_DIR=${HOME}/pl0296-02/project_data/hisat2-2.2.1
 SAMTOOLS_DIR=${HOME}/pl0296-02/project_data/samtools-1.19.2
 data_dir=data/input/fastq_small
-out_dir=data/output/bam_hisat2_041125
+out_dir=data/output/bam_hisat2
 sufix=".fastq.gz"
-FASTA=reference/Sus_scrofa.Sscrofa11.1.dna.toplevel.fa
-GTF=reference/Sus_scrofa.Sscrofa11.1.104.gtf
-INDEX_PREFIX=reference/hisat2_index/Sus_scrofa.Sscrofa11.1
+INDEX_PREFIX=reference/hisat2_index/chr19_4300000-4800000
 
 mkdir -p ${out_dir} reference/hisat2_index
 
-# ==== 1. (Optional) Decompress reference files if needed ====
-# gunzip -c "${FASTA}.gz" > "${FASTA}"
-# gunzip -c "${GTF}.gz" > "${GTF}"
-
-# ==== 2. Build HISAT2 index if not present ====
-if [ ! -e "${INDEX_PREFIX}.1.ht2" ]; then
-    echo "🧬 Building HISAT2 index..."
-    ${HISAT2_DIR}/hisat2-build -p 8 ${FASTA} ${INDEX_PREFIX}
-    echo "✅ Index built at ${INDEX_PREFIX}*"
-else
-    echo "✅ HISAT2 index already exists, skipping build."
-fi
-
-# ==== 3. Map reads ====
+# ==== Map reads ====
 for f in ${data_dir}/SRR*_2${sufix}; do
 {
     SAMPLE=$(basename ${f} _2${sufix})
