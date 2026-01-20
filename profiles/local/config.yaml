@@ -2,7 +2,7 @@
 executor: local
 cores: 8
 jobs: 100
-use-conda: true
+use-conda: false
 rerun-incomplete: true
 printshellcmds: true
 latency-wait: 120

@@ -1,137 +1,303 @@
-# --- Snakefile (fixed header + rule all) ---
+# Unified Snakefile combining QC, splicing, simulation, StringTie, and mapper tuning
+
+import os
+import re
+from pathlib import Path
 
 import pandas as pd
-from pathlib import Path
 
 configfile: "config.yaml"
 
-# ---- samples.tsv → SAMPLE_ROWS ----
-# Expected columns (min): sample, read1
-# Optional: read2, dataset, layout, threads, etc.
-SAMPLES = pd.read_csv("samples.tsv", sep="\t", dtype=str).fillna("")
+# Match simplified execution environment
+shell.executable("/bin/bash")
+shell.prefix("set -euo pipefail")
 
-# Dict keyed by sample -> row dict
+# ---- Load samples.tsv ----
+SAMPLES = pd.read_csv("samples.tsv", sep="\t", dtype=str).fillna("")
 SAMPLE_ROWS = {
     row["sample"]: {k: (v if v is not None else "") for k, v in row.items()}
     for row in SAMPLES.to_dict(orient="records")
 }
 
-# Fail early if duplicates or missing
+# Fail early on duplicates or missing read1
 if len(SAMPLE_ROWS) != len(SAMPLES):
     dupes = SAMPLES["sample"][SAMPLES["sample"].duplicated()].tolist()
     raise ValueError(f"Duplicate sample IDs in samples.tsv: {dupes}")
-if not all("read1" in r and r["read1"] for r in SAMPLE_ROWS.values()):
-    missing = [k for k, r in SAMPLE_ROWS.items() if not r.get("read1")]
-    raise ValueError(f"Missing read1 for samples: {missing}")
+missing_read1 = [k for k, r in SAMPLE_ROWS.items() if not r.get("read1")]
+if missing_read1:
+    raise ValueError(f"Missing read1 for samples: {missing_read1}")
 
-# ---- config merges for per-sample cfg ----
-def sample_cfg(row: dict) -> dict:
-    dataset = row.get("dataset", "") or "dataset"
-    defaults = (config.get("defaults") or {})
-    datasets = (config.get("datasets") or {})
-    merged = {}
-    merged.update(defaults)
-    merged.update(datasets.get(dataset, {}))
-    # normalize a few expected keys
-    merged.setdefault("threads", 8)
-    merged.setdefault("layout", "PE")
-    merged.setdefault("star", {})
-    merged.setdefault("hisat2", {"score_min": "L,0,-0.2"})
-    return merged
+SAMPLE_IDS = list(SAMPLE_ROWS.keys())
+DATASETS = sorted({row.get("dataset", "") for row in SAMPLE_ROWS.values() if row.get("dataset")})
 
+# ---- Config defaults ----
+DEFAULT_CFG = config.get("defaults", {}) or {}
+DATASET_CFGS = config.get("datasets", {}) or {}
 
-# Load rule modules FIRST so their symbols/paths exist when we reference them
+def dataset_defaults(dataset: str):
+    entry = DATASET_CFGS.get(dataset or "", {})
+    if isinstance(entry, dict):
+        return entry.get("defaults", {}) or {}
+    return {}
+
+def prefixed_overrides(row: dict, prefix: str) -> dict:
+    """Collect columns like 'star.twopassMode' into nested dicts."""
+    data = {}
+    prefix_token = f"{prefix}."
+    for key, value in row.items():
+        if key.startswith(prefix_token) and value not in ("", None):
+            data[key[len(prefix_token):]] = value
+    return data
+
+def build_star_cfg(row: dict, dataset: str) -> dict:
+    cfg = {}
+    cfg.update(DEFAULT_CFG.get("star", {}) or {})
+    cfg.update(dataset_defaults(dataset).get("star", {}) or {})
+    cfg.update(prefixed_overrides(row, "star"))
+    return cfg
+
+def build_hisat_cfg(row: dict, dataset: str) -> dict:
+    cfg = {}
+    cfg.update(DEFAULT_CFG.get("hisat2", {}) or {})
+    cfg.update(dataset_defaults(dataset).get("hisat2", {}) or {})
+    cfg.update(prefixed_overrides(row, "hisat2"))
+    return cfg
+
+def build_sample_cfg(sample: str) -> dict:
+    row = SAMPLE_ROWS[sample]
+    dataset = row.get("dataset", "")
+    ds_defaults = dataset_defaults(dataset)
+
+    mapper = (
+        row.get("mapper")
+        or ds_defaults.get("mapper")
+        or DEFAULT_CFG.get("mapper")
+        or "HISAT2"
+    )
+    threads = (
+        row.get("threads")
+        or ds_defaults.get("threads")
+        or DEFAULT_CFG.get("threads")
+        or 8
+    )
+    layout = (
+        row.get("layout")
+        or ds_defaults.get("layout")
+        or DEFAULT_CFG.get("layout")
+        or "PE"
+    )
+    strandedness = (
+        row.get("strandedness")
+        or ds_defaults.get("strandedness")
+        or DEFAULT_CFG.get("strandedness")
+        or "auto"
+    )
+    run_label = (
+        row.get("run_label")
+        or ds_defaults.get("run_label")
+        or DEFAULT_CFG.get("run_label")
+        or ""
+    )
+
+    cfg = {
+        "mapper": mapper.upper(),
+        "threads": int(threads),
+        "layout": layout,
+        "strandedness": strandedness,
+        "run_label": run_label,
+        "star": build_star_cfg(row, dataset),
+        "hisat2": build_hisat_cfg(row, dataset),
+    }
+    return cfg
+
+SAMPLE_CFGS = {sample: build_sample_cfg(sample) for sample in SAMPLE_IDS}
+
+def sample_cfg(sample: str) -> dict:
+    return SAMPLE_CFGS[sample]
+
+def sample_mapper(sample: str) -> str:
+    return sample_cfg(sample)["mapper"]
+
+def sample_threads(sample: str) -> int:
+    return int(sample_cfg(sample).get("threads", 8))
+
+def sample_star_cfg(sample: str) -> dict:
+    return sample_cfg(sample).get("star", {})
+
+def sample_hisat_cfg(sample: str) -> dict:
+    return sample_cfg(sample).get("hisat2", {})
+
+def slugify(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
+    safe = re.sub(r"_+", "_", safe).strip("_")
+    return safe or "run"
+
+def auto_star_label(star_cfg: dict) -> str:
+    bits = [
+        "star",
+        f"tp{star_cfg.get('twopassMode', 'None')}",
+        f"mm{star_cfg.get('outFilterMismatchNoverLmax', 'NA')}",
+    ]
+    if star_cfg.get("label"):
+        bits.append(star_cfg["label"])
+    return "_".join(bits)
+
+def auto_hisat_label(hisat_cfg: dict, strandedness: str) -> str:
+    score = hisat_cfg.get("score_min", "")
+    bits = ["hisat2"]
+    if score:
+        bits.append(f"sm{score.replace(',', '_')}")
+    strand = hisat_cfg.get("rna_strandness") or strandedness
+    if strand:
+        bits.append(f"str{strand}")
+    if hisat_cfg.get("label"):
+        bits.append(hisat_cfg["label"])
+    return "_".join(bits)
+
+def sample_run_label(sample: str) -> str:
+    cfg = sample_cfg(sample)
+    manual = cfg.get("run_label") or SAMPLE_ROWS[sample].get("run_label")
+    if manual:
+        return slugify(manual)
+    if cfg["mapper"] == "STAR":
+        return slugify(auto_star_label(cfg["star"]))
+    return slugify(auto_hisat_label(cfg["hisat2"], cfg.get("strandedness", "")))
+
+def mapper_subdir(sample: str) -> str:
+    return f"{sample_mapper(sample).lower()}/{sample_run_label(sample)}"
+
+def bam_path(sample: str) -> str:
+    return f"results/mapping/{mapper_subdir(sample)}/{sample}.bam"
+
+def bai_path(sample: str) -> str:
+    return f"{bam_path(sample)}.bai"
+
+def bam_for_sample(sample: str) -> str:
+    return bam_path(sample)
+
+def hisat2_strandness(sample: str) -> str:
+    override = sample_hisat_cfg(sample).get("rna_strandness")
+    base = override or sample_cfg(sample).get("strandedness", "")
+    if not base:
+        return ""
+    normalized = base.lower()
+    mapping = {
+        "auto": "",
+        "unstranded": "",
+        "none": "",
+        "fr": "FR",
+        "rf": "RF",
+        "forward": "FR",
+        "reverse": "RF",
+        "fr-firststrand": "FR",
+        "fr-secondstrand": "RF",
+        "fr_firststrand": "FR",
+        "fr_secondstrand": "RF",
+    }
+    if normalized in mapping:
+        return mapping[normalized]
+    return base.upper()
+
+def star_outsam_arg(sample: str) -> str:
+    value = sample_star_cfg(sample).get("outSAMtype", ["BAM", "SortedByCoordinate"])
+    if isinstance(value, (list, tuple)):
+        joined = " ".join(str(v) for v in value if v not in ("", None))
+        return joined or "BAM SortedByCoordinate"
+    return str(value or "BAM SortedByCoordinate")
+
+def star_mismatch_arg(sample: str) -> str:
+    value = sample_star_cfg(sample).get("outFilterMismatchNoverLmax", DEFAULT_CFG.get("star", {}).get("outFilterMismatchNoverLmax", "0.03"))
+    return str(value)
+
+def star_twopass_mode(sample: str) -> str:
+    return str(sample_star_cfg(sample).get("twopassMode", "None"))
+
+def star_read_command(sample: str) -> str:
+    return sample_star_cfg(sample).get("readFilesCommand", "zcat")
+
+def star_strand_field(sample: str) -> str:
+    return sample_star_cfg(sample).get("outSAMstrandField", "intronMotif")
+
+def sample_output_dir(sample: str) -> str:
+    return os.path.dirname(bam_path(sample))
+
+def hisat2_score_min_arg(sample: str) -> str:
+    value = sample_hisat_cfg(sample).get("score_min", DEFAULT_CFG.get("hisat2", {}).get("score_min", "L,0,-0.2"))
+    return str(value)
+
+def hisat2_known_splices(sample: str) -> str:
+    return sample_hisat_cfg(sample).get("knownSplicesiteFile", "") or ""
+
+STAR_SAMPLES = [s for s in SAMPLE_IDS if sample_mapper(s) == "STAR"]
+HISAT2_SAMPLES = [s for s in SAMPLE_IDS if sample_mapper(s) == "HISAT2"]
+
+def star_bam_targets():
+    return [bam_path(s) for s in STAR_SAMPLES]
+
+def star_bai_targets():
+    return [bai_path(s) for s in STAR_SAMPLES]
+
+def hisat2_bam_targets():
+    return [bam_path(s) for s in HISAT2_SAMPLES]
+
+def hisat2_bai_targets():
+    return [bai_path(s) for s in HISAT2_SAMPLES]
+
+def stringtie_targets():
+    return [f"results/stringtie/{sid}.gtf" for sid in SAMPLE_IDS]
+
+OUTDIR = Path(config.get("outdir", "results"))
+STAR_INDEX_TARGET = "reference/star_index_chr19_window"
+HISAT2_INDEX_DONE = "logs/hisat2_index.done"
+
+# Simulation hooks from simplified Snakefile
+SIM_CFG = config.get("simulate", {}) or {}
+SIM_ENABLED = bool(SIM_CFG.get("enabled", False))
+SIM_DATASETS = sorted(SIM_CFG.get("per_dataset", {}).keys()) or DATASETS
+
+# Include rule modules
+# include: "rules/simulate.smk"
 include: "rules/refs.smk"
 include: "rules/mapping.smk"
 include: "rules/qc.smk"
-include: "rules/splicing.smk"
-include: "rules/simulate.smk"
-
-# Samples table
-SAMPLES = pd.read_csv("samples.tsv", sep="\t", dtype=str).fillna("")
-
-# Which datasets are used in samples?
-DATASETS = sorted(set(SAMPLES["dataset"]))
-
-# Convenience: expand all BAMs using a helper from mapping rules, or define here if needed.
-# If your mapping rules already define bam_path(sample_id), keep using that.
-# Otherwise, uncomment this local helper to match your mapper outputs.
-# def bam_path(sample_id):
-#     # e.g., "results/mapping/{sample}.bam" or similar — adjust to your actual layout
-#     return f"results/mapping/{sample_id}.bam"
-
-# If your pipeline defines SAMPLE_ROWS dict elsewhere, you can recreate keys here
-# assuming a unique 'sample' column:
-SAMPLE_IDS = list(SAMPLES["sample"].unique())
-
-# rMATS contrasts, if present in config (e.g., config["as"]["contrasts"] = [["A","B"], ["A","C"]])
-CONTRASTS = []
-if "as" in config and isinstance(config["as"].get("contrasts"), list):
-    CONTRASTS = [tuple(c) for c in config["as"]["contrasts"] if isinstance(c, (list, tuple)) and len(c) == 2]
-
-# Where multiqc report goes (adjust to your true QC output dir)
-OUTDIR = Path("results")
-
-def star_targets():
-    # STAR index directory per dataset
-    return [f"work/refs/{ds}/STARindex" for ds in DATASETS]
-
-def hisat2_targets():
-    # HISAT2 index completion marker per dataset (from refs.smk)
-    return [f"work/refs/{ds}/hisat2/.done" for ds in DATASETS]
-
-def bam_targets():
-    # If you have bam_path(sample_id) defined in mapping rules, use it.
-    # Otherwise fall back to a common default (adjust to your actual mapping output).
-    try:
-        # mapping.smk likely provides bam_path
-        return [bam_path(sid) for sid in SAMPLE_IDS]  # noqa: F821 if not defined
-    except NameError:
-        # Fallback — adjust pattern to your actual mapper outputs
-        return [f"results/mapping/{sid}.bam" for sid in SAMPLE_IDS]
-
-def rmats_targets():
-    # Only when AS is enabled
-    if not config.get("as", {}).get("enabled", False):
-        return []
-    targets = []
-    # Expect a function like rmats_outdir(ds, g1, g2) from splicing.smk.
-    # If not present, fall back to a conventional path.
-    for ds in DATASETS:
-        for (g1, g2) in CONTRASTS:
-            try:
-                targets.append(str(rmats_outdir(ds, g1, g2) / "MATS_output" / "done.flag"))  # noqa: F821
-            except NameError:
-                targets.append(f"results/rmats/{ds}/{g1}_vs_{g2}/MATS_output/done.flag")
-    return targets
+# include: "rules/splicing.smk"
+include: "rules/stringtie.smk"
 
 def simulate_targets():
-    # Only when simulation is enabled
-    if not config.get("simulate", {}).get("enabled", False):
+    if not SIM_ENABLED or not SIM_DATASETS:
         return []
-    t = []
-    for ds in DATASETS:
-        # If ds_sim_cfg(ds) exists in simulate.smk, prefer it
-        try:
-            outdir = Path(ds_sim_cfg(ds).get("outdir", f"data/sim/{ds}"))  # noqa: F821
-        except NameError:
-            outdir = Path(f"data/sim/{ds}")
-        t.append(str(outdir / "done.flag"))
-    return t
+    try:
+        return all_sim_done_targets(SIM_DATASETS)
+    except NameError:
+        return [f"data/sim/{ds}/done.flag" for ds in SIM_DATASETS]
+
+def fastqc_targets():
+    if not config.get("qc", {}).get("fastqc", False):
+        return []
+    return [f"results/fastqc/{sid}.done" for sid in SAMPLE_IDS]
 
 def multiqc_target():
-    return [str(OUTDIR / "multiqc" / "multiqc_report.html")] if config.get("qc", {}).get("multiqc", False) else []
+    return ["results/multiqc/multiqc_report.html"] if config.get("qc", {}).get("multiqc", False) else []
+
+def rmats_targets():
+    if not config.get("as", {}).get("enabled", False):
+        return []
+    try:
+        return rmats_done_targets()
+    except NameError:
+        return []
 
 rule all:
     input:
         # Reference indexes
-        star_targets(),
-        hisat2_targets(),
-        # Alignments
-        bam_targets(),
-        # Alternative splicing outputs (when enabled)
+        STAR_INDEX_TARGET,
+        HISAT2_INDEX_DONE,
+        # Mapper-specific BAMs and index files
+        star_bam_targets(),
+        star_bai_targets(),
+        hisat2_bam_targets(),
+        hisat2_bai_targets(),
+        # Downstream analyses
+        stringtie_targets(),
         rmats_targets(),
-        # Simulation outputs (when enabled)
-        simulate_targets(),
-        # MultiQC report (when enabled)
-        multiqc_target()
+

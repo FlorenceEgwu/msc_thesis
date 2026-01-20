@@ -3,7 +3,7 @@
 Snakemake-based RNA‑Seq pipeline for the thesis: "Enhanced RNA‑Seq data analysis workflow in molecular biotechnology:
 Parameter refinements of mappers for improved accuracy in alternative splicing detection".
 Focus on STAR and HISAT2 mapping with rMATS for alternative splicing; 
-supports local and Slurm (HPC) execution; uses conda/mamba environments.
+supports local and Slurm (HPC) execution; assumes mapper/QC tools are pre-installed (env specs kept only for reference only).
 
 ## High-level Structure
 
@@ -11,7 +11,7 @@ supports local and Slurm (HPC) execution; uses conda/mamba environments.
 
 - config.yaml — central configuration (samples, references, parameters).
 
--envs/ — conda environment specs (e.g., refs.yaml, star.yaml, hisat2.yaml, rmats.yaml).
+-envs/ — legacy conda environment specs (refs, star, hisat2, rmats, etc.) you can reuse if you decide to re-enable conda.
 
 - profiles/ — Snakemake profiles: local/ and slurm/.
 
@@ -29,21 +29,17 @@ supports local and Slurm (HPC) execution; uses conda/mamba environments.
 ## Quickstart
 
 ### Requirements
-- Mamba/Conda, Snakemake ≥7.32 (recommended), conda-lock (optional)
+- Snakemake ≥7.32 plus system-installed STAR, HISAT2, samtools, FastQC, MultiQC, StringTie, and rMATS (conda/mamba optional if you wish to revive the env specs).
 
 ### Setup
-bash
-`mamba env create -f envs/refs.yaml`
-`mamba env create -f envs/star.yaml`
-`mamba env create -f envs/hisat2.yaml`
-`mamba env create -f envs/rmats.yaml`
+Ensure the required tools are on your `$PATH` (e.g., via modules or manual installs noted in `rules/refs.smk`).
 
 ## Local run (example)
-`snakemake --profile profiles/local --use-conda -j 4`
+`snakemake --profile profiles/local -j 4`
 
 ## Slurm (HPC)
 
-`snakemake --profile profiles/slurm --use-conda --rerun-incomplete`
+`snakemake --profile profiles/slurm --rerun-incomplete`
 
 ## Expected Inputs
 

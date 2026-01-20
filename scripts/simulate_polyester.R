@@ -1,9 +1,34 @@
 #!/usr/bin/env Rscript
-## Robust polyester-based simulation script
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=8
+#SBATCH --mem=40gb
+#SBATCH --time=8:00:00
+#SBATCH --mail-type=FAIL,END
+#SBATCH --mail-user=fae.florence1@gmail.com
+#SBATCH --account=pl0296-02
+#SBATCH --job-name=simulate_polyester
+#SBATCH --output=logs/simulate_polyester_%j.log
+#SBATCH --error=logs/simulate_polyester_%j.err
+
+## polyester-based data simulation script
 suppressPackageStartupMessages({
-  if (!requireNamespace("optparse", quietly = TRUE)) stop("Please install R package 'optparse'")
-  if (!requireNamespace("Biostrings", quietly = TRUE)) stop("Please install Biostrings")
-  if (!requireNamespace("polyester", quietly = TRUE)) stop("Please install polyester")
+  # Ensure required packages are available (install missing deps on the fly)
+  install_if_missing <- function(pkg, bioc = FALSE) {
+    if (requireNamespace(pkg, quietly = TRUE)) return(invisible(TRUE))
+    if (bioc) {
+      if (!requireNamespace("BiocManager", quietly = TRUE)) {
+        install.packages("BiocManager", repos = "https://cloud.r-project.org")
+      }
+      BiocManager::install(pkg, ask = FALSE, update = FALSE)
+    } else {
+      install.packages(pkg, repos = "https://cloud.r-project.org")
+    }
+  }
+
+  install_if_missing("optparse", bioc = FALSE)
+  install_if_missing("Biostrings", bioc = TRUE)
+  install_if_missing("polyester", bioc = TRUE)
   library(optparse)
   library(Biostrings)
   library(polyester)
@@ -47,12 +72,15 @@ reads_per_transcript <- matrix(
   floor(opt$reads_per_sample / k),
   nrow = k, ncol = opt$n_samples
 )
+# Keep expression constant across samples unless user provides custom design later
+fold_changes <- matrix(1, nrow = k, ncol = opt$n_samples)
 
 message("Simulating ", opt$n_samples, " sample(s) with ~", opt$reads_per_sample, " reads each")
 
 simulate_experiment(
   fasta = opt$transcripts,
   readmat = reads_per_transcript,
+  fold_changes = fold_changes,
   outdir = opt$outdir,
   readlen = opt$read_length,
   paired = opt$paired,

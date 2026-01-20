@@ -12,7 +12,6 @@ rule fastqc:
         )
     output:
         "results/fastqc/{sample}.done"
-    conda: "envs/qc.yaml"
     threads: 2
     params:
         outdir = f"{OUTDIR}/fastqc"
@@ -31,7 +30,6 @@ rule multiqc:
                          sample=list(SAMPLE_ROWS.keys()))
     output:
         "results/multiqc/multiqc_report.html"
-    conda: "envs/qc.yaml"
     shell:
         r"""
         mkdir -p "{OUTDIR}/multiqc"

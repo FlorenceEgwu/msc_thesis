@@ -1,6 +1,0 @@
-name: rmats_env
-channels: [conda-forge, bioconda, defaults]
-dependencies:
-  - rmats
-  - samtools
-  - python=3.10

@@ -1,0 +1,20 @@
+# -*- coding: utf-8 -*-
+# Snakefile RNA-seq variant calling pipeline
+# Organizm: mouse
+
+import glob
+import os
+import logging
+from pathlib import Path 
+
+
+REF="reference/chr19_4300000-4800000.fa"
+GTF="reference/chr19_4300000-4800000_fixed.gtf"
+STAR_DIR = os.path.expanduser("${HOME}/pl0296-02/project_data/STAR-2.7.11b/source")
+HISAT2_DIR=os.path.expanduser("${HOME}/pl0296-02/project_data/hisat2-2.2.1")
+SAMTOOLS_DIR=os.path.expanduser("${HOME}/pl0296-02/project_data/samtools-1.19.2")
+data_dir = "data/input/fastq_small"
+star_dir = "data/output/bam_star"
+hisat2_dir="data/output/bam_hisat2"
+
+

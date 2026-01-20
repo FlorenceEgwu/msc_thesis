@@ -1,0 +1,8 @@
+name: polyester_env
+channels: [conda-forge, bioconda, defaults]
+dependencies:
+  - r-base
+  - bioconductor-polyester
+  - bioconductor-biostrings
+  - r-optparse
+  - pigz

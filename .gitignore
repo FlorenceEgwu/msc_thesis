@@ -3,6 +3,7 @@
 .Rhistory
 .RData
 .Ruserdata
+.github/
 
 # Snakemake files
 Snakefile
@@ -24,3 +25,5 @@ logs/*
 Log*
 Aligned.sortedByCoord.out.bam
 screenlog.*
+work/
+results/
