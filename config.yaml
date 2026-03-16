@@ -15,12 +15,12 @@ defaults:
 
 # Datasets (group-level defaults + references + overrides)
 datasets:
-  mouse_singlecell_pilot:
+  mouse_bulk_chr19:
     organism: "mouse"
-    ref: "refs/mm39/genome.fa"
-    gtf: "refs/mm39/annotation.gtf"
-    star_index_dir: "refs/mm39/STARindex"
-    hisat2_index_prefix: "refs/mm39/hisat2/genome"
+    ref: "reference/chr19_4300000-4800000.fa"
+    gtf: "reference/chr19_4300000-4800000_fixed.gtf"
+    star_index_dir: "reference/star_index_chr19_window"
+    hisat2_index_prefix: "reference/hisat2_index/chr19_4300000-4800000"
     defaults:
       mapper: "HISAT2"
       hisat2:
@@ -35,20 +35,23 @@ qc:
   fastqc: true
   multiqc: true
 as:
-  enabled: true
+  enabled: false
   tool: rmats
   design_tsv: "design.tsv"   # sample-to-condition map (see below)
-  read_length: 101           # to be set to actual read length
+  read_length: 101           # required for rmats
   library_type: "fr-firststrand"   # fr-firststrand | fr-secondstrand | unstranded
 
 simulate:
-  enabled: true
+  enabled: false
   per_dataset:
-    human_bulk_2025:
+    mouse_bulk_chr19:
       n_samples: 2
       reads_per_sample: 1000000
       read_length: 101
       paired_end: true
-      outdir: "data/sim/human_bulk_2025"
-      # If absent, we'll build it as refs/<genome>/transcripts.fa from your GTF+FA
-      transcript_fa: "refs/hg38/transcripts.fa"
+      outdir: "data/sim/mouse_bulk_chr19"
+      transcript_fa: "reference/chr19_4300000-4800000.fa"
+
+stringtie:
+  bin_dir: "~/pl0296-02/project_data/stringtie"
+  gtf: "reference/chr19_4300000-4800000_fixed.gtf"

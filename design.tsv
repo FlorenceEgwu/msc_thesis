@@ -1,5 +1,2 @@
 sample	dataset	condition
-A1	human_bulk_2025	control
-A2	human_bulk_2025	treated
-B1	mouse_singlecell_pilot	control
-B2	mouse_singlecell_pilot	treated
+A1	mouse_bulk_chr19	control

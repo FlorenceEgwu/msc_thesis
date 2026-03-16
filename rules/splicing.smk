@@ -29,9 +29,12 @@ else:
             CONTRASTS.append((ds, conds[0], conds[1]))
 
 # --- Helpers to collect BAMs produced by mapping rules ---
-def bam_path(sample_id: str) -> str:
-    # Must match map_star/map_hisat2 outputs; adjust if you changed the layout there.
-    return f"results/mapping/{sample_id}.bam"
+try:
+    bam_path  # noqa: F821 - prefer definition from Snakefile
+except NameError:
+    def bam_path(sample_id: str) -> str:
+        # Must match map_star/map_hisat2 outputs; adjust if you changed the layout there.
+        return f"results/mapping/{sample_id}.bam"
 
 def samples_for(ds: str, condition: str):
     sub = SAMPLES[(SAMPLES["dataset"] == ds) & (SAMPLES["condition"] == condition)]
@@ -50,7 +53,7 @@ def rmats_done_targets():
 # --- rMATS rule ---
 # NOTE: outputs use static wildcard-based paths (allowed). Dynamic lists are in input/params only.
 rule rmats:
-    input:
+    input: 
         # canonical refs from refs.smk
         gtf = "work/refs/{ds}/annotation.gtf",
         # BAMs for each group (lists are allowed in input)
@@ -60,7 +63,6 @@ rule rmats:
         # single marker so Snakemake knows the run completed
         "results/rmats/{ds}/{g1}_vs_{g2}/MATS_output/done.flag"
     threads: lambda w: int(config.get("as", {}).get("threads", 8))
-    conda: "envs/rmats.yaml"
     params:
         outdir = "results/rmats/{ds}/{g1}_vs_{g2}",
         tmp    = "work/rmats/{ds}/{g1}_vs_{g2}",
