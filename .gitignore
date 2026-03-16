@@ -20,6 +20,7 @@ __pycache__/
 
 # Ignore output directories
 reference/*index*/
+reference/genome/*
 data/*
 logs/*
 Log*

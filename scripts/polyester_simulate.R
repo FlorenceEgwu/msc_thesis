@@ -6,16 +6,14 @@ suppressPackageStartupMessages({
 })
 
 # ============================================================
-# Polyester simulation script aligned to "Settings for datasets generation"
+# Polyester simulation script aligned to resources/settings4sim1.html
 # ------------------------------------------------------------
 # Key fixes relative to the previous version:
-# 1) This variant keeps the HTML transcript assignment logic but uses 4 samples total
-#    (2 per condition), matching the earlier 4-paired-FASTQ workflow.
+# 1) num_reps is fixed at c(5, 5), as described in the HTML.
 # 2) The tables in the HTML are used to ASSIGN transcripts to
 #    (complexity x fold-change x coverage) bins.
 #    They are NOT extra simulation loops over num_reps.
-# 3) reads_per_transcript uses round(cov * width(fasta) / read_length),
-#    matching the HTML description.
+# 3) reads_per_transcript uses round(cov * width(fasta) / read_length).
 # 4) Dataset 2 is handled asymmetrically:
 #    - transcripts 1:900 (first transcript in each gene) are all 1:1
 #    - transcripts 901:1800 (second transcript in each gene) follow Dataset 1 rules
@@ -27,23 +25,19 @@ suppressPackageStartupMessages({
 # ============================================================
 
 # -----------------------------
-# User settings
+# Settings
 # -----------------------------
 READ_LENGTH <- 100L
-# This variant is for the earlier workflow with 4 paired-end samples total:
-#   Cond1_rep01, Cond1_rep02, Cond2_rep01, Cond2_rep02
-NUM_REPS <- c(2L, 2L)          # 4 sample variant: 2 samples/condition -> 4 paired FASTQ outputs
+NUM_REPS <- c(5L, 5L) # Cond1 and Cond2 replicates fixed at 5 each
 PAIRED <- TRUE
 STRAND_SPECIFIC <- FALSE
 SEED_BASE <- 12345L
 
-FASTA_DATASET1 <- "data/input/fasta_polyester/fasta_prep/transcripts_1tx.fa"  # 900 transcripts
-FASTA_DATASET2 <- "data/input/fasta_polyester/fasta_prep/transcripts_2tx.fa"  # 1800 transcripts
-OUT_ROOT <- "data/sim/html_settings_design_4fastq_variant"
+FASTA_DATASET1 <- "data/input/fasta_polyester/fasta_prep_cdna/transcripts_1tx.fa"  # 900 transcripts
+FASTA_DATASET2 <- "data/input/fasta_polyester/fasta_prep_cdna/transcripts_2tx.fa"  # 1800 transcripts
+OUT_ROOT <- "data/sim/settings4sim1_design"
 
-# -----------------------------
-# Constants
-# -----------------------------
+# FC groups (Cond1:Cond2)
 FC_GROUPS <- list(
   "1_1" = c(1, 1),
   "1_2" = c(1, 2),
@@ -110,8 +104,8 @@ make_count_matrix <- function(reads_per_tx, fc_mat, num_reps) {
   as.data.frame(count_mat, check.names = FALSE, stringsAsFactors = FALSE)
 }
 
-# Infer gene IDs only from ordering described in the HTML, so the script
-# does not depend on FASTA header parsing conventions.
+# Infer gene IDs only from ordering described in the settings html, 
+# so the we can use the same FASTA files without relying on specific header parsing. 
 make_gene_design_dataset1 <- function(tx_ids) {
   n_tx <- length(tx_ids)
   if (n_tx != 900L) stopf("Dataset 1 expects 900 transcripts, got %d.", n_tx)
@@ -229,7 +223,7 @@ build_dataset1_design <- function(tx_ids, tx_len) {
 }
 
 # Dataset 2 design (1800 transcripts)
-# Order required by the HTML:
+# Order required:
 #   1:900  = first transcript in gene: easy x300, complex x600, all FC 1:1
 #   901:1800 = second transcript in gene: same rule as Dataset 1
 build_dataset2_design <- function(tx_ids, tx_len) {
