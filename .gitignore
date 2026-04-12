@@ -28,3 +28,5 @@ Aligned.sortedByCoord.out.bam
 screenlog.*
 work/
 results/
+tmp/
+scripts/result_analysis/

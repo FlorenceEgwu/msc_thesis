@@ -13,7 +13,7 @@ verbose: true
 default-resources:
   - threads=8
   - mem_mb=40000
-  - runtime=8h
+  - runtime=24h
 
 restart-times: 1
 max-status-checks-per-second: 10
