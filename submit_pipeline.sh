@@ -2,14 +2,14 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=27
-#SBATCH --mem=80gb
+#SBATCH --mem=160gb
 #SBATCH --time=168:00:00
 #SBATCH --mail-type=FAIL,END
 #SBATCH --mail-user=fae.florence1@gmail.com
 #SBATCH --account=pl0296-02
 #SBATCH --job-name=snakemake_pipeline
-#SBATCH --output=logs/snakemake_%j.log
-#SBATCH --error=logs/snakemake_%j.err
+#SBATCH --output=logs/snakemake/snakemake_%j.log
+#SBATCH --error=logs/snakemake/snakemake_%j.err
 
 # ==== SETUP ====
 set -euo pipefail
@@ -68,9 +68,8 @@ echo ""
   --resources "mem_mb=${TOTAL_MEM_MB}" \
   --rerun-incomplete \
   --keep-going \
-  --printshellcmds \
-  --verbose
-
+  --printshellcmds
+  
   #add -j command to specify number of parallel jobs
 
 echo ""

@@ -7,8 +7,8 @@
 #SBATCH --mail-user=fae.florence1@gmail.com
 #SBATCH --account=pl0296-02
 #SBATCH --job-name=snakemake_dryrun
-#SBATCH --output=logs/snakemake_dryrun_%j.log
-#SBATCH --error=logs/snakemake_dryrun_%j.err
+#SBATCH --output=logs/snakemake/dryrun_%j.log
+#SBATCH --error=logs/snakemake/dryrun_%j.err
 
 # ==== SETUP ====
 set -euo pipefail
@@ -65,8 +65,7 @@ echo ""
   --dry-run \
   --rerun-incomplete \
   --keep-going \
-  --printshellcmds \
-  --verbose
+  --printshellcmds
 
 echo ""
 echo "✅ Dry run completed (no commands were executed)."

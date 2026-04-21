@@ -230,3 +230,9 @@ tools:
   hisat2_dir: "~/pl0296-02/project_data/hisat2-2.2.1"
   samtools_dir: "~/pl0296-02/project_data/samtools-1.19.2"
   stringtie_dir: "~/pl0296-02/project_data/stringtie"
+
+ground_truth:
+  complex_exon_threshold: 2
+
+resources:
+  ground_truth_mem_mb: 8000

@@ -135,9 +135,43 @@ def hisat2_read_format_flag(sample: str) -> str:
     if any(path.endswith(fasta_suffixes) for path in read_paths if path):
         return "-f"
     return "-q"
-
 STAR_SAMPLES = [s for s in SAMPLE_IDS if sample_mapper(s) == "STAR"]
 HISAT2_SAMPLES = [s for s in SAMPLE_IDS if sample_mapper(s) == "HISAT2"]
+
+
+# Ground truth helpers
+def sample_truth_read1(sample: str) -> str:
+    return sample_cfg(sample).get("read1")
+
+def sample_truth_read2(sample: str) -> str:
+    return sample_cfg(sample).get("read2")
+
+COORDINATE_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.coordinates.tsv"
+    for s in SAMPLE_IDS
+]
+
+STANDARD_SUMMARY_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.standard_summary.tsv"
+    for s in SAMPLE_IDS
+]
+
+GROUND_TRUTH_SUMMARY_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.ground_truth_summary.tsv"
+    for s in SAMPLE_IDS
+]
+
+STRATIFIED_SUMMARY_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.stratified_summary.tsv"
+    for s in SAMPLE_IDS
+]
+
+ALL_COORDINATES_TARGET = f"{OUTDIR}/ground_truth/all_coordinates.tsv"
+ALL_STANDARD_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_standard_summary.tsv"
+ALL_GROUND_TRUTH_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_ground_truth_summary.tsv"
+ALL_STRATIFIED_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_stratified_summary.tsv"
+GROUND_TRUTH_GTF_TABLE_TARGET = f"{OUTDIR}/ground_truth/gtf_exons.tsv"
+
 
 def star_bam_targets():
     return [bam_path(s) for s in STAR_SAMPLES]
@@ -157,6 +191,7 @@ def sample_design_target():
 include: "rules/refs.smk"
 include: "rules/mapping.smk"
 include: "rules/sample_design.smk"
+include: "rules/ground_truth.smk"
 
 rule all:
     input:
@@ -167,3 +202,12 @@ rule all:
         hisat2_bam_targets(),
         hisat2_bai_targets(),
         sample_design_target(),
+        GROUND_TRUTH_GTF_TABLE_TARGET,
+        COORDINATE_TARGETS,
+        STANDARD_SUMMARY_TARGETS,
+        GROUND_TRUTH_SUMMARY_TARGETS,
+        STRATIFIED_SUMMARY_TARGETS,
+        ALL_COORDINATES_TARGET,
+        ALL_STANDARD_SUMMARY_TARGET,
+        ALL_GROUND_TRUTH_SUMMARY_TARGET,
+        ALL_STRATIFIED_SUMMARY_TARGET,
