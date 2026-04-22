@@ -1,235 +1,177 @@
-# Unified Snakefile combining QC, splicing, simulation, StringTie, and mapper tuning
-
 import os
-import re
-from pathlib import Path
+import workflowSampleDesign
 
-import pandas as pd
-
-configfile: "config.yaml"
-
-# Match simplified execution environment
+# Match execution environment
 shell.executable("/bin/bash")
 shell.prefix("set -euo pipefail")
 
-# ---- Load samples.tsv ----
-SAMPLES = pd.read_csv("samples.tsv", sep="\t", dtype=str).fillna("")
-SAMPLE_ROWS = {
-    row["sample"]: {k: (v if v is not None else "") for k, v in row.items()}
-    for row in SAMPLES.to_dict(orient="records")
+# ---- Config inputs ----
+configfile: "config.yaml"
+
+#ouptut and temp directories
+OUTDIR = config.get("outdir", "data/results")
+TMPDIR = config.get("tmpdir", "tmp")
+
+# Reference files and index locations
+REF_FASTA = config.get("ref", "reference/genome/Mus_musculus.GRCm39.dna.primary_assembly.fa")
+REF_GTF = config.get("gtf", "reference/genome/Mus_musculus.GRCm39.115.gtf")
+STAR_INDEX_TARGET = config.get("star_index_dir",  "reference/star_index")
+STAR_INDEX_DONE = "logs/star_index.done"
+HISAT2_INDEX_PREFIX = config.get("hisat2_index_prefix", "reference/hisat2_index/mus_musculus_index")
+HISAT2_INDEX_DONE = "logs/hisat2_index.done"
+
+# use config for tool paths, with defaults
+TOOL_CFG = config.get("tools", {}) or {}
+STAR_DIR = os.path.expanduser(TOOL_CFG.get("star_dir", "~/pl0296-02/project_data/STAR-2.7.11b/source"))
+HISAT2_DIR = os.path.expanduser(TOOL_CFG.get("hisat2_dir", "~/pl0296-02/project_data/hisat2-2.2.1"))
+SAMTOOLS_DIR = os.path.expanduser(TOOL_CFG.get("samtools_dir", "~/pl0296-02/project_data/samtools-1.19.2"))
+STRINGTIE_DIR = os.path.expanduser(TOOL_CFG.get("stringtie_dir", "~/pl0296-02/project_data/stringtie"))
+
+# default mapping parameters with defaults that can be overridden by sample config
+TUNED_PARAMS = config.get("tuned_parameters_defaults", {}) or {}
+DEFAULT_MAPPER_PARAMS = {
+    "STAR": TUNED_PARAMS.get("star", {}) or {},
+    "HISAT2": TUNED_PARAMS.get("hisat2", {}) or {},
 }
 
-# Fail early on duplicates or missing read1
-if len(SAMPLE_ROWS) != len(SAMPLES):
-    dupes = SAMPLES["sample"][SAMPLES["sample"].duplicated()].tolist()
-    raise ValueError(f"Duplicate sample IDs in samples.tsv: {dupes}")
-missing_read1 = [k for k, r in SAMPLE_ROWS.items() if not r.get("read1")]
-if missing_read1:
-    raise ValueError(f"Missing read1 for samples: {missing_read1}")
+# Resource defaults for local scheduling inside a single Slurm allocation.
+RESOURCE_CFG = config.get("resources", {}) or {}
 
-SAMPLE_IDS = list(SAMPLE_ROWS.keys())
-DATASETS = sorted({row.get("dataset", "") for row in SAMPLE_ROWS.values() if row.get("dataset")})
+def resource_mb(key: str, default: int) -> int:
+    return int(RESOURCE_CFG.get(key, default) or default)
 
-# ---- Config defaults ----
-DEFAULT_CFG = config.get("defaults", {}) or {}
-DATASET_CFGS = config.get("datasets", {}) or {}
+STAR_MAP_MEM_MB = resource_mb("star_map_mem_mb", 48000)
+HISAT2_MAP_MEM_MB = resource_mb("hisat2_map_mem_mb", 12000)
+STAR_INDEX_MEM_MB = resource_mb("star_index_mem_mb", 48000)
+HISAT2_INDEX_MEM_MB = resource_mb("hisat2_index_mem_mb", 16000)
 
-def dataset_defaults(dataset: str):
-    entry = DATASET_CFGS.get(dataset or "", {})
-    if isinstance(entry, dict):
-        return entry.get("defaults", {}) or {}
-    return {}
-
-def prefixed_overrides(row: dict, prefix: str) -> dict:
-    """Collect columns like 'star.twopassMode' into nested dicts."""
-    data = {}
-    prefix_token = f"{prefix}."
-    for key, value in row.items():
-        if key.startswith(prefix_token) and value not in ("", None):
-            data[key[len(prefix_token):]] = value
-    return data
-
-def build_star_cfg(row: dict, dataset: str) -> dict:
-    cfg = {}
-    cfg.update(DEFAULT_CFG.get("star", {}) or {})
-    cfg.update(dataset_defaults(dataset).get("star", {}) or {})
-    cfg.update(prefixed_overrides(row, "star"))
-    return cfg
-
-def build_hisat_cfg(row: dict, dataset: str) -> dict:
-    cfg = {}
-    cfg.update(DEFAULT_CFG.get("hisat2", {}) or {})
-    cfg.update(dataset_defaults(dataset).get("hisat2", {}) or {})
-    cfg.update(prefixed_overrides(row, "hisat2"))
-    return cfg
-
-def build_sample_cfg(sample: str) -> dict:
-    row = SAMPLE_ROWS[sample]
-    dataset = row.get("dataset", "")
-    ds_defaults = dataset_defaults(dataset)
-
-    mapper = (
-        row.get("mapper")
-        or ds_defaults.get("mapper")
-        or DEFAULT_CFG.get("mapper")
-        or "HISAT2"
-    )
-    threads = (
-        row.get("threads")
-        or ds_defaults.get("threads")
-        or DEFAULT_CFG.get("threads")
-        or 8
-    )
-    layout = (
-        row.get("layout")
-        or ds_defaults.get("layout")
-        or DEFAULT_CFG.get("layout")
-        or "PE"
-    )
-    strandedness = (
-        row.get("strandedness")
-        or ds_defaults.get("strandedness")
-        or DEFAULT_CFG.get("strandedness")
-        or "auto"
-    )
-    run_label = (
-        row.get("run_label")
-        or ds_defaults.get("run_label")
-        or DEFAULT_CFG.get("run_label")
-        or ""
-    )
-
-    cfg = {
-        "mapper": mapper.upper(),
-        "threads": int(threads),
-        "layout": layout,
-        "strandedness": strandedness,
-        "run_label": run_label,
-        "star": build_star_cfg(row, dataset),
-        "hisat2": build_hisat_cfg(row, dataset),
-    }
-    return cfg
-
-SAMPLE_CFGS = {sample: build_sample_cfg(sample) for sample in SAMPLE_IDS}
-
+# Sample design
+DATASETS = config.get("datasets", {}) or {}
+SAMPLE_ROWS, SAMPLE_IDS = workflowSampleDesign.expand_samples(DATASETS)
+            
+# Accessors
 def sample_cfg(sample: str) -> dict:
-    return SAMPLE_CFGS[sample]
+    return SAMPLE_ROWS[sample]
 
 def sample_mapper(sample: str) -> str:
-    return sample_cfg(sample)["mapper"]
+    return sample_cfg(sample).get("mapper", "").upper()
 
 def sample_threads(sample: str) -> int:
-    return int(sample_cfg(sample).get("threads", 8))
+    return int(sample_cfg(sample).get("threads", 8) or 8)
+
+def sample_mapper_params(sample: str) -> dict:
+    mapper = sample_mapper(sample)
+    base = DEFAULT_MAPPER_PARAMS.get(mapper, {}).copy() or {}
+    base.update(sample_cfg(sample).get("parameters", {}) or {})
+    return base
 
 def sample_star_cfg(sample: str) -> dict:
-    return sample_cfg(sample).get("star", {})
+    return sample_mapper_params(sample) if sample_mapper(sample) == "STAR" else {}
 
 def sample_hisat_cfg(sample: str) -> dict:
-    return sample_cfg(sample).get("hisat2", {})
+    return sample_mapper_params(sample) if sample_mapper(sample) == "HISAT2" else {}
 
-def slugify(value: str) -> str:
-    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
-    safe = re.sub(r"_+", "_", safe).strip("_")
-    return safe or "run"
+def mapper_param(sample: str, key: str, fallback):
+    return sample_mapper_params(sample).get(key, fallback)
 
-def auto_star_label(star_cfg: dict) -> str:
-    bits = [
-        "star",
-        f"tp{star_cfg.get('twopassMode', 'None')}",
-        f"mm{star_cfg.get('outFilterMismatchNoverLmax', 'NA')}",
-    ]
-    if star_cfg.get("label"):
-        bits.append(star_cfg["label"])
-    return "_".join(bits)
+def star_mm_arg(sample: str) -> str:
+    return str(mapper_param(sample, "--outFilterMultimapNmax", 10))
 
-def auto_hisat_label(hisat_cfg: dict, strandedness: str) -> str:
-    score = hisat_cfg.get("score_min", "")
-    bits = ["hisat2"]
-    if score:
-        bits.append(f"sm{score.replace(',', '_')}")
-    strand = hisat_cfg.get("rna_strandness") or strandedness
-    if strand:
-        bits.append(f"str{strand}")
-    if hisat_cfg.get("label"):
-        bits.append(hisat_cfg["label"])
-    return "_".join(bits)
+def star_intron_min_arg(sample: str) -> str:
+    return str(mapper_param(sample, "--alignIntronMin", 20))
 
-def sample_run_label(sample: str) -> str:
-    cfg = sample_cfg(sample)
-    manual = cfg.get("run_label") or SAMPLE_ROWS[sample].get("run_label")
-    if manual:
-        return slugify(manual)
-    if cfg["mapper"] == "STAR":
-        return slugify(auto_star_label(cfg["star"]))
-    return slugify(auto_hisat_label(cfg["hisat2"], cfg.get("strandedness", "")))
+def hisat2_k_arg(sample: str) -> str:
+    return str(mapper_param(sample, "-k", 5))
+
+def hisat2_min_intronlen_arg(sample: str) -> str:
+    return str(mapper_param(sample, "--min-intronlen", 20))
+
+def sample_param_group(sample: str) -> str:
+    return workflowSampleDesign.sample_param_group(sample_cfg(sample))
 
 def mapper_subdir(sample: str) -> str:
-    return f"{sample_mapper(sample).lower()}/{sample_run_label(sample)}"
+    return f"{sample_mapper(sample).lower()}/{sample_param_group(sample)}"
+
+def mapper_bam_pattern(mapper: str) -> str:
+    return f"{OUTDIR}/mapping/{mapper.lower()}/{{run}}/{{sample}}.bam"
+
+def mapper_bai_pattern(mapper: str) -> str:
+    return f"{mapper_bam_pattern(mapper)}.bai"
 
 def bam_path(sample: str) -> str:
-    return f"results/mapping/{mapper_subdir(sample)}/{sample}.bam"
-
-def bai_path(sample: str) -> str:
-    return f"{bam_path(sample)}.bai"
-
-def bam_for_sample(sample: str) -> str:
-    return bam_path(sample)
-
-def hisat2_strandness(sample: str) -> str:
-    override = sample_hisat_cfg(sample).get("rna_strandness")
-    base = override or sample_cfg(sample).get("strandedness", "")
-    if not base:
-        return ""
-    normalized = base.lower()
-    mapping = {
-        "auto": "",
-        "unstranded": "",
-        "none": "",
-        "fr": "FR",
-        "rf": "RF",
-        "forward": "FR",
-        "reverse": "RF",
-        "fr-firststrand": "FR",
-        "fr-secondstrand": "RF",
-        "fr_firststrand": "FR",
-        "fr_secondstrand": "RF",
-    }
-    if normalized in mapping:
-        return mapping[normalized]
-    return base.upper()
-
-def star_outsam_arg(sample: str) -> str:
-    value = sample_star_cfg(sample).get("outSAMtype", ["BAM", "SortedByCoordinate"])
-    if isinstance(value, (list, tuple)):
-        joined = " ".join(str(v) for v in value if v not in ("", None))
-        return joined or "BAM SortedByCoordinate"
-    return str(value or "BAM SortedByCoordinate")
-
-def star_mismatch_arg(sample: str) -> str:
-    value = sample_star_cfg(sample).get("outFilterMismatchNoverLmax", DEFAULT_CFG.get("star", {}).get("outFilterMismatchNoverLmax", "0.03"))
-    return str(value)
-
-def star_twopass_mode(sample: str) -> str:
-    return str(sample_star_cfg(sample).get("twopassMode", "None"))
-
-def star_read_command(sample: str) -> str:
-    return sample_star_cfg(sample).get("readFilesCommand", "zcat")
-
-def star_strand_field(sample: str) -> str:
-    return sample_star_cfg(sample).get("outSAMstrandField", "intronMotif")
+    return f"{OUTDIR}/mapping/{mapper_subdir(sample)}/{sample}.bam"
 
 def sample_output_dir(sample: str) -> str:
     return os.path.dirname(bam_path(sample))
 
-def hisat2_score_min_arg(sample: str) -> str:
-    value = sample_hisat_cfg(sample).get("score_min", DEFAULT_CFG.get("hisat2", {}).get("score_min", "L,0,-0.2"))
-    return str(value)
+def bai_path(sample: str) -> str:
+    return f"{bam_path(sample)}.bai"
 
-def hisat2_known_splices(sample: str) -> str:
-    return sample_hisat_cfg(sample).get("knownSplicesiteFile", "") or ""
+def star_read_command(sample: str) -> str:
+    explicit = sample_star_cfg(sample).get("readFilesCommand")
+    if explicit:
+        return explicit
 
+    read_paths = [
+        sample_cfg(sample).get("read1", ""),
+        sample_cfg(sample).get("read2", ""),
+    ]
+    compressed_suffixes = (".gz", ".gzip")
+    if any(path.endswith(compressed_suffixes) for path in read_paths if path):
+        return "zcat"
+    return "cat"
+
+def hisat2_read_format_flag(sample: str) -> str:
+    read_paths = [
+        sample_cfg(sample).get("read1", ""),
+        sample_cfg(sample).get("read2", ""),
+    ]
+    fasta_suffixes = (
+        ".fa", ".fa.gz",
+        ".fasta", ".fasta.gz",
+        ".fna", ".fna.gz",
+        ".ffn", ".ffn.gz",
+    )
+    if any(path.endswith(fasta_suffixes) for path in read_paths if path):
+        return "-f"
+    return "-q"
 STAR_SAMPLES = [s for s in SAMPLE_IDS if sample_mapper(s) == "STAR"]
 HISAT2_SAMPLES = [s for s in SAMPLE_IDS if sample_mapper(s) == "HISAT2"]
+
+
+# Ground truth helpers
+def sample_truth_read1(sample: str) -> str:
+    return sample_cfg(sample).get("read1")
+
+def sample_truth_read2(sample: str) -> str:
+    return sample_cfg(sample).get("read2")
+
+COORDINATE_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.coordinates.tsv"
+    for s in SAMPLE_IDS
+]
+
+STANDARD_SUMMARY_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.standard_summary.tsv"
+    for s in SAMPLE_IDS
+]
+
+GROUND_TRUTH_SUMMARY_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.ground_truth_summary.tsv"
+    for s in SAMPLE_IDS
+]
+
+STRATIFIED_SUMMARY_TARGETS = [
+    f"{OUTDIR}/ground_truth/{mapper_subdir(s)}/{s}.stratified_summary.tsv"
+    for s in SAMPLE_IDS
+]
+
+ALL_COORDINATES_TARGET = f"{OUTDIR}/ground_truth/all_coordinates.tsv"
+ALL_STANDARD_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_standard_summary.tsv"
+ALL_GROUND_TRUTH_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_ground_truth_summary.tsv"
+ALL_STRATIFIED_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_stratified_summary.tsv"
+GROUND_TRUTH_GTF_TABLE_TARGET = f"{OUTDIR}/ground_truth/gtf_exons.tsv"
+
 
 def star_bam_targets():
     return [bam_path(s) for s in STAR_SAMPLES]
@@ -243,61 +185,29 @@ def hisat2_bam_targets():
 def hisat2_bai_targets():
     return [bai_path(s) for s in HISAT2_SAMPLES]
 
-def stringtie_targets():
-    return [f"results/stringtie/{sid}.gtf" for sid in SAMPLE_IDS]
+def sample_design_target():
+    return f"{OUTDIR}/sample_design.tsv"
 
-OUTDIR = Path(config.get("outdir", "results"))
-STAR_INDEX_TARGET = "reference/star_index_chr19_window"
-HISAT2_INDEX_DONE = "logs/hisat2_index.done"
-
-# Simulation hooks from simplified Snakefile
-SIM_CFG = config.get("simulate", {}) or {}
-SIM_ENABLED = bool(SIM_CFG.get("enabled", False))
-SIM_DATASETS = sorted(SIM_CFG.get("per_dataset", {}).keys()) or DATASETS
-
-# Include rule modules
-# include: "rules/simulate.smk"
 include: "rules/refs.smk"
 include: "rules/mapping.smk"
-include: "rules/qc.smk"
-# include: "rules/splicing.smk"
-include: "rules/stringtie.smk"
-
-def simulate_targets():
-    if not SIM_ENABLED or not SIM_DATASETS:
-        return []
-    try:
-        return all_sim_done_targets(SIM_DATASETS)
-    except NameError:
-        return [f"data/sim/{ds}/done.flag" for ds in SIM_DATASETS]
-
-def fastqc_targets():
-    if not config.get("qc", {}).get("fastqc", False):
-        return []
-    return [f"results/fastqc/{sid}.done" for sid in SAMPLE_IDS]
-
-def multiqc_target():
-    return ["results/multiqc/multiqc_report.html"] if config.get("qc", {}).get("multiqc", False) else []
-
-def rmats_targets():
-    if not config.get("as", {}).get("enabled", False):
-        return []
-    try:
-        return rmats_done_targets()
-    except NameError:
-        return []
+include: "rules/sample_design.smk"
+include: "rules/ground_truth.smk"
 
 rule all:
     input:
-        # Reference indexes
-        STAR_INDEX_TARGET,
+        STAR_INDEX_DONE,
         HISAT2_INDEX_DONE,
-        # Mapper-specific BAMs and index files
         star_bam_targets(),
         star_bai_targets(),
         hisat2_bam_targets(),
         hisat2_bai_targets(),
-        # Downstream analyses
-        stringtie_targets(),
-        rmats_targets(),
-
+        sample_design_target(),
+        GROUND_TRUTH_GTF_TABLE_TARGET,
+        COORDINATE_TARGETS,
+        STANDARD_SUMMARY_TARGETS,
+        GROUND_TRUTH_SUMMARY_TARGETS,
+        STRATIFIED_SUMMARY_TARGETS,
+        ALL_COORDINATES_TARGET,
+        ALL_STANDARD_SUMMARY_TARGET,
+        ALL_GROUND_TRUTH_SUMMARY_TARGET,
+        ALL_STRATIFIED_SUMMARY_TARGET,

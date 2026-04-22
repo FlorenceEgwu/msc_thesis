@@ -3,39 +3,19 @@
 suppressPackageStartupMessages({
   library(polyester)
   library(Biostrings)
+  library(dplyr)
 })
 
-# ============================================================
-# Polyester simulation script aligned to resources/settings4sim1.html
-# ------------------------------------------------------------
-# Key fixes relative to the previous version:
-# 1) num_reps is fixed at c(5, 5), as described in the HTML.
-# 2) The tables in the HTML are used to ASSIGN transcripts to
-#    (complexity x fold-change x coverage) bins.
-#    They are NOT extra simulation loops over num_reps.
-# 3) reads_per_transcript uses round(cov * width(fasta) / read_length).
-# 4) Dataset 2 is handled asymmetrically:
-#    - transcripts 1:900 (first transcript in each gene) are all 1:1
-#    - transcripts 901:1800 (second transcript in each gene) follow Dataset 1 rules
-# 5) Design files are written as TSV:
-#    - transcript_design.tsv
-#    - gene_design.tsv
-#    - sample_design.tsv
-#    - count_matrix.tsv
-# ============================================================
-
-# -----------------------------
 # Settings
-# -----------------------------
 READ_LENGTH <- 100L
 NUM_REPS <- c(5L, 5L) # Cond1 and Cond2 replicates fixed at 5 each
 PAIRED <- TRUE
 STRAND_SPECIFIC <- FALSE
 SEED_BASE <- 12345L
 
-FASTA_DATASET1 <- "data/input/fasta_polyester/fasta_prep_cdna/transcripts_1tx.fa"  # 900 transcripts
-FASTA_DATASET2 <- "data/input/fasta_polyester/fasta_prep_cdna/transcripts_2tx.fa"  # 1800 transcripts
-OUT_ROOT <- "data/sim/settings4sim1_design"
+FASTA_DATASET1 <- "data/input/selected_transcripts/transcripts_1tx.fa"  # 900 tx
+FASTA_DATASET2 <- "data/input/selected_transcripts/transcripts_2tx.fa"  # 1800 tx
+OUT_ROOT <- "data/input/sim/settings4sim1_design"
 
 # FC groups (Cond1:Cond2)
 FC_GROUPS <- list(
@@ -46,9 +26,7 @@ FC_GROUPS <- list(
   "4_1" = c(4, 1)
 )
 
-# -----------------------------
 # Helpers
-# -----------------------------
 stopf <- function(...) stop(sprintf(...), call. = FALSE)
 
 reads_per_transcript_from_coverage <- function(tx_len, coverage, read_length) {
@@ -104,26 +82,96 @@ make_count_matrix <- function(reads_per_tx, fc_mat, num_reps) {
   as.data.frame(count_mat, check.names = FALSE, stringsAsFactors = FALSE)
 }
 
-# Infer gene IDs only from ordering described in the settings html, 
-# so the we can use the same FASTA files without relying on specific header parsing. 
-make_gene_design_dataset1 <- function(tx_ids) {
-  n_tx <- length(tx_ids)
-  if (n_tx != 900L) stopf("Dataset 1 expects 900 transcripts, got %d.", n_tx)
+parse_fasta_metadata <- function(tx) {
+  fasta_header <- names(tx)
+  if (length(fasta_header) == 0L) {
+    stopf("FASTA contains no named records.")
+  }
+
+  parsed_header <- sub(" .*", "", fasta_header)
+  parts <- strsplit(parsed_header, "\\|")
+  if (any(lengths(parts) != 2L)) {
+    bad_header <- parsed_header[which(lengths(parts) != 2L)[1]]
+    stopf(
+      "FASTA headers must be formatted as transcript_id|gene_id. Bad header: %s",
+      bad_header
+    )
+  }
+
+  transcript_id <- vapply(parts, `[`, character(1), 1L)
+  gene_id <- vapply(parts, `[`, character(1), 2L)
+
+  if (anyNA(transcript_id) || any(transcript_id == "")) {
+    stopf("Parsed FASTA transcript IDs contain missing or empty values.")
+  }
+  if (anyNA(gene_id) || any(gene_id == "")) {
+    stopf("Parsed FASTA gene IDs contain missing or empty values.")
+  }
+  if (anyDuplicated(transcript_id) > 0L) {
+    dup_id <- transcript_id[duplicated(transcript_id)][1]
+    stopf("Duplicate transcript_id found in FASTA headers: %s", dup_id)
+  }
 
   data.frame(
-    gene_id = sprintf("gene_%03d", seq_len(900L)),
-    transcript_id = tx_ids,
+    transcript_index = seq_along(tx),
+    fasta_header = fasta_header,
+    transcript_id = transcript_id,
+    gene_id = gene_id,
+    length = width(tx),
+    stringsAsFactors = FALSE
+  )
+}
+
+validate_tx_metadata <- function(tx_meta, dataset_name) {
+  if (dataset_name == "dataset1_900tx") {
+    if (nrow(tx_meta) != 900L) stopf("Dataset 1 expects 900 transcripts, got %d.", nrow(tx_meta))
+    gene_sizes <- table(tx_meta$gene_id)
+    if (length(gene_sizes) != 900L) {
+      stopf("Dataset 1 expects 900 genes, got %d.", length(gene_sizes))
+    }
+    if (!all(gene_sizes == 1L)) {
+      stopf("Dataset 1 FASTA must contain exactly one transcript per gene.")
+    }
+  } else if (dataset_name == "dataset2_1800tx") {
+    if (nrow(tx_meta) != 1800L) stopf("Dataset 2 expects 1800 transcripts, got %d.", nrow(tx_meta))
+    gene_sizes <- table(tx_meta$gene_id)
+    if (length(gene_sizes) != 900L) {
+      stopf("Dataset 2 expects 900 genes, got %d.", length(gene_sizes))
+    }
+    if (!all(gene_sizes == 2L)) {
+      stopf("Dataset 2 FASTA must contain exactly two transcripts per gene.")
+    }
+
+    first_gene_ids <- tx_meta$gene_id[seq_len(900L)]
+    second_gene_ids <- tx_meta$gene_id[900L + seq_len(900L)]
+    if (anyDuplicated(first_gene_ids) > 0L || anyDuplicated(second_gene_ids) > 0L) {
+      stopf("Dataset 2 FASTA must contain unique gene IDs within each 900-transcript block.")
+    }
+    if (!identical(first_gene_ids, second_gene_ids)) {
+      stopf("Dataset 2 FASTA gene order must match between the first and second 900-transcript blocks.")
+    }
+  } else {
+    stopf("Unknown dataset_name: %s", dataset_name)
+  }
+
+  invisible(tx_meta)
+}
+
+make_gene_design_dataset1 <- function(tx_meta) {
+  validate_tx_metadata(tx_meta, "dataset1_900tx")
+
+  data.frame(
+    gene_id = tx_meta$gene_id,
+    transcript_id = tx_meta$transcript_id,
     transcript_in_gene = 1L,
     transcript_type = c(rep("easy", 300L), rep("complex", 600L)),
     stringsAsFactors = FALSE
   )
 }
 
-make_gene_design_dataset2 <- function(tx_ids) {
-  n_tx <- length(tx_ids)
-  if (n_tx != 1800L) stopf("Dataset 2 expects 1800 transcripts, got %d.", n_tx)
+make_gene_design_dataset2 <- function(tx_meta) {
+  validate_tx_metadata(tx_meta, "dataset2_1800tx")
 
-  gene_id <- sprintf("gene_%03d", rep(seq_len(900L), times = 2L))
   transcript_in_gene <- c(rep(1L, 900L), rep(2L, 900L))
   transcript_type <- c(
     rep("easy", 300L), rep("complex", 600L),
@@ -131,8 +179,8 @@ make_gene_design_dataset2 <- function(tx_ids) {
   )
 
   data.frame(
-    gene_id = gene_id,
-    transcript_id = tx_ids,
+    gene_id = tx_meta$gene_id,
+    transcript_id = tx_meta$transcript_id,
     transcript_in_gene = transcript_in_gene,
     transcript_type = transcript_type,
     stringsAsFactors = FALSE
@@ -144,7 +192,6 @@ make_gene_design_dataset2 <- function(tx_ids) {
 #   transcript_type, fc_label, coverage, n
 expand_block_spec <- function(spec_df, expected_n, block_name) {
   rows <- vector("list", nrow(spec_df))
-  idx <- 1L
 
   for (i in seq_len(nrow(spec_df))) {
     row <- spec_df[i, , drop = FALSE]
@@ -159,7 +206,6 @@ expand_block_spec <- function(spec_df, expected_n, block_name) {
       coverage = rep(as.integer(row$coverage), n_i),
       stringsAsFactors = FALSE
     )
-    idx <- idx + n_i
   }
 
   out <- do.call(rbind, rows)
@@ -173,7 +219,7 @@ expand_block_spec <- function(spec_df, expected_n, block_name) {
 }
 
 # Dataset 1 design (900 transcripts)
-# Order required by the HTML:
+# Order required by the settings HTML:
 #   easy x 300, then complex x 600
 build_dataset1_design <- function(tx_ids, tx_len) {
   if (length(tx_ids) != 900L) stopf("Dataset 1 expects 900 transcripts.")
@@ -273,22 +319,25 @@ build_dataset2_design <- function(tx_ids, tx_len) {
 }
 
 write_tsv <- function(df, path) {
-  write.table(df, file = path, sep = "\t", row.names = FALSE, quote = FALSE)
+  write.table(df, file = path, sep = "	", row.names = FALSE, quote = FALSE)
 }
 
 simulate_dataset <- function(fasta_path, outdir, dataset_name) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
   tx <- readDNAStringSet(fasta_path)
-  tx_ids <- names(tx)
-  tx_len <- width(tx)
+  tx_meta <- parse_fasta_metadata(tx)
+  validate_tx_metadata(tx_meta, dataset_name)
+
+  tx_ids <- tx_meta$transcript_id
+  tx_len <- tx_meta$length
 
   if (dataset_name == "dataset1_900tx") {
     design <- build_dataset1_design(tx_ids, tx_len)
-    gene_design <- make_gene_design_dataset1(tx_ids)
+    gene_design <- make_gene_design_dataset1(tx_meta)
   } else if (dataset_name == "dataset2_1800tx") {
     design <- build_dataset2_design(tx_ids, tx_len)
-    gene_design <- make_gene_design_dataset2(tx_ids)
+    gene_design <- make_gene_design_dataset2(tx_meta)
   } else {
     stopf("Unknown dataset_name: %s", dataset_name)
   }

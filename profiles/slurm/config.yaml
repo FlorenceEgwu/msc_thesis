@@ -1,7 +1,7 @@
 # profiles/slurm/config.yaml
 # Snakemake SLURM configuration for local execution with conda support
 
-jobs: 20
+jobs: 40
 use-conda: false
 rerun-incomplete: true
 printshellcmds: true
@@ -11,9 +11,9 @@ verbose: true
 
 # Default resources for all jobs
 default-resources:
-  - threads=8
-  - mem_mb=40000
-  - runtime=8h
+  - threads=16
+  - mem_mb=20000
+  - runtime=24h
 
 restart-times: 1
-max-status-checks-per-second: 10
+max-status-checks-per-second: 100

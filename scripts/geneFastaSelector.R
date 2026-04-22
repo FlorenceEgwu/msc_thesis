@@ -22,7 +22,7 @@ suppressPackageStartupMessages({
 # ----------------------------
 gtf_path <- "reference/genome/Mus_musculus.GRCm39.115.gtf"
 cdna_fa <- "reference/genome/Mus_musculus.GRCm39.cdna.all.fa.gz"
-out_dir <- "data/input/fasta_polyester/fasta_prep_cdna"
+out_dir <- "data/input/selected_transcripts"
 protein_coding_only <- TRUE
 seed <- 20260220L
 
@@ -270,40 +270,6 @@ n_tx_dataset2 <- tx_tbl %>%
 
 if (n_tx_dataset1 != 900L) stop("dataset1 transcript count expected 900, found ", n_tx_dataset1, ".", call. = FALSE)
 if (n_tx_dataset2 != 1800L) stop("dataset2 transcript count expected 1800, found ", n_tx_dataset2, ".", call. = FALSE)
-
-extract_tx_fasta <- function(gene_ids, out_fa) {
-  tx_subset <- tx_tbl %>%
-    filter(gene_id %in% gene_ids) %>%
-    distinct(gene_id, tx_name, .keep_all = FALSE) %>%
-    filter(!is.na(tx_name), tx_name != "")
-
-  requested_ids <- tx_subset$tx_name
-  if (length(requested_ids) == 0L) return(invisible(NULL))
-
-  exact_hits <- unname(cdna_row_by_id[requested_ids])
-  base_hits <- unname(cdna_row_by_base_id[strip_ensembl_version(requested_ids)])
-  row_idx <- exact_hits
-  row_idx[is.na(row_idx)] <- base_hits[is.na(row_idx)]
-
-  missing_ids <- requested_ids[is.na(row_idx)]
-  if (length(missing_ids) > 0L) {
-    stop(
-      "Could not find ", length(missing_ids), " transcript IDs in Ensembl cDNA FASTA for ",
-      out_fa, ". Example IDs: ", paste(utils::head(missing_ids, 5L), collapse = ", "),
-      call. = FALSE
-    )
-  }
-
-  if (anyDuplicated(requested_ids) > 0L) {
-    stop("Duplicate transcript IDs found in requested FASTA order.", call. = FALSE)
-  }
-
-  seqs <- readDNAStringSet(cdna_index[as.integer(row_idx), , drop = FALSE])
-  gene_id_map <- setNames(tx_subset$gene_id, tx_subset$tx_name)
-  names(seqs) <- paste0(requested_ids, "|", gene_id_map[requested_ids])
-
-  writeXStringSet(seqs, out_fa)
-}
 
 extract_tx_fasta_ordered <- function(ordered_tx_names, tx_to_gene_map, out_fa) {
   requested_ids <- ordered_tx_names
