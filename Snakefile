@@ -166,7 +166,7 @@ STRATIFIED_SUMMARY_TARGETS = [
     for s in SAMPLE_IDS
 ]
 
-ALL_COORDINATES_TARGET = f"{OUTDIR}/ground_truth/all_coordinates.tsv"
+#ALL_COORDINATES_TARGET = f"{OUTDIR}/ground_truth/all_coordinates.tsv"
 ALL_STANDARD_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_standard_summary.tsv"
 ALL_GROUND_TRUTH_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_ground_truth_summary.tsv"
 ALL_STRATIFIED_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_stratified_summary.tsv"
@@ -207,7 +207,7 @@ rule all:
         STANDARD_SUMMARY_TARGETS,
         GROUND_TRUTH_SUMMARY_TARGETS,
         STRATIFIED_SUMMARY_TARGETS,
-        ALL_COORDINATES_TARGET,
+        #ALL_COORDINATES_TARGET,
         ALL_STANDARD_SUMMARY_TARGET,
         ALL_GROUND_TRUTH_SUMMARY_TARGET,
         ALL_STRATIFIED_SUMMARY_TARGET,
