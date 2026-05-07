@@ -26,6 +26,8 @@ resources:
   star_index_mem_mb: 48000
   hisat2_index_mem_mb: 16000
   ground_truth_mem_mb: 8000
+  rmats_mem_mb: 32000
+  rmats_summary_mem_mb: 4000
 
 # Datasets
 datasets:
@@ -321,6 +323,29 @@ tools:
   hisat2_dir: "~/pl0296-02/project_data/hisat2-2.2.1"
   samtools_dir: "~/pl0296-02/project_data/samtools-1.19.2"
   stringtie_dir: "~/pl0296-02/project_data/stringtie"
+  rmats_bin: "rmats.py"
+  python_bin: "python"
 
 ground_truth:
   complex_exon_threshold: 2
+
+rmats:
+  enabled: true
+  datasets:
+    - sim_mouse_dataset2
+    - sim_mouse_dataset3
+  condition_a:
+    name: Cond1
+    sample_ids: [1, 2, 3, 4, 5]
+  condition_b:
+    name: Cond2
+    sample_ids: [6, 7, 8, 9, 10]
+  threads: 8
+  read_length: 100
+  lib_type: fr-unstranded
+  paired_stats: false
+  fdr: 0.05
+  min_abs_inc_level_difference: 0.0
+  novel_ss: false
+  variable_read_length: false
+  truth_table: ""

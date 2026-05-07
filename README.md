@@ -49,4 +49,10 @@ Ensure the required tools are on your `$PATH` (e.g., via modules or manual insta
 
 - Splicing event tables and summaries (rMATS).
 
+- Ground-truth mapping summaries with divisions by read type, transcript complexity,
+  mapping-error type, and inferred AS-event class.
+
+- rMATS per-case significant-event tables and merged summaries for simulated
+  datasets 2 and 3.
+
 - QC reports and intermediate logs.

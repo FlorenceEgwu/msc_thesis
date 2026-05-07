@@ -172,6 +172,61 @@ ALL_GROUND_TRUTH_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_ground_truth_summa
 ALL_STRATIFIED_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_stratified_summary.tsv"
 GROUND_TRUTH_GTF_TABLE_TARGET = f"{OUTDIR}/ground_truth/gtf_exons.tsv"
 
+# rMATS helpers for differential alternative-splicing analysis on datasets 2/3.
+RMATS_CFG = config.get("rmats", {}) or {}
+RMATS_ENABLED = str(RMATS_CFG.get("enabled", True)).lower() in {"1", "true", "yes", "y"}
+RMATS_DATASETS = set(RMATS_CFG.get("datasets", ["sim_mouse_dataset2", "sim_mouse_dataset3"]) or [])
+RMATS_CONDITION_A = RMATS_CFG.get("condition_a", {"name": "Cond1", "sample_ids": [1, 2, 3, 4, 5]}) or {}
+RMATS_CONDITION_B = RMATS_CFG.get("condition_b", {"name": "Cond2", "sample_ids": [6, 7, 8, 9, 10]}) or {}
+RMATS_TRUTH_TABLE_TARGET = RMATS_CFG.get("truth_table") or f"{OUTDIR}/rmats/simulation_truth.tsv"
+
+def sample_number(sample: str) -> int:
+    return int(str(sample).rsplit("_", 1)[-1])
+
+def rmats_cases():
+    if not RMATS_ENABLED:
+        return []
+    cases = set()
+    for sample in SAMPLE_IDS:
+        row = sample_cfg(sample)
+        dataset = row.get("dataset", "")
+        if dataset in RMATS_DATASETS:
+            cases.add((dataset, sample_mapper(sample).lower(), sample_param_group(sample)))
+    return sorted(cases)
+
+def rmats_bams(dataset: str, mapper: str, param_group: str, condition: dict) -> list:
+    wanted_ids = {int(x) for x in condition.get("sample_ids", [])}
+    samples = [
+        sample for sample in SAMPLE_IDS
+        if sample_cfg(sample).get("dataset", "") == dataset
+        and sample_mapper(sample).lower() == mapper.lower()
+        and sample_param_group(sample) == param_group
+        and sample_number(sample) in wanted_ids
+    ]
+    return [bam_path(sample) for sample in sorted(samples, key=sample_number)]
+
+def rmats_summary_targets():
+    return [
+        f"{OUTDIR}/rmats/{dataset}/{mapper}/{param_group}/summary.tsv"
+        for dataset, mapper, param_group in rmats_cases()
+    ]
+
+def rmats_all_summary_target():
+    return f"{OUTDIR}/rmats/all_summary.tsv"
+
+def rmats_truth_design_files():
+    dataset_names = sorted(RMATS_DATASETS)
+    return [
+        f"data/input/sim/polyester_design/{dataset.replace('sim_mouse_', '')}/transcript_design.tsv"
+        for dataset in dataset_names
+    ]
+
+def rmats_targets():
+    targets = rmats_summary_targets()
+    if targets:
+        targets.append(rmats_all_summary_target())
+    return targets
+
 
 def star_bam_targets():
     return [bam_path(s) for s in STAR_SAMPLES]
@@ -192,6 +247,7 @@ include: "rules/refs.smk"
 include: "rules/mapping.smk"
 include: "rules/sample_design.smk"
 include: "rules/ground_truth.smk"
+include: "rules/rmats.smk"
 
 rule all:
     input:
@@ -211,3 +267,4 @@ rule all:
         ALL_STANDARD_SUMMARY_TARGET,
         ALL_GROUND_TRUTH_SUMMARY_TARGET,
         ALL_STRATIFIED_SUMMARY_TARGET,
+        rmats_targets(),

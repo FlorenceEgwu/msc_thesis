@@ -53,7 +53,13 @@ load_flat_exons <- function(gtf_table_file) {
   exon_dt[, cum_end := cumsum(w), by = transcript_id]
   exon_dt[, cum_start := cum_end - w + 1L][, w := NULL]
 
-  tx_dt <- unique(exon_dt[, .(transcript_id, gene_id, exon_count, transcript_type)])
+  as_cols <- intersect(c("as_event_type"), names(exon_dt))
+  tx_dt <- unique(exon_dt[, c(
+    "transcript_id", "gene_id", "exon_count", "transcript_type", as_cols
+  ), with = FALSE])
+  if (!"as_event_type" %in% names(tx_dt)) {
+    tx_dt[, as_event_type := "unknown"]
+  }
   list(exons = exon_dt, transcripts = tx_dt)
 }
 
@@ -317,12 +323,15 @@ ground_summary <- function(tbl, sample, mapper, dataset, run) {
 
 stratified_summary <- function(tbl, sample, mapper, dataset, run) {
   p <- tbl[is_secondary == FALSE & is_supplementary == FALSE]
+  if (!"as_event_type" %in% names(p)) {
+    p[, as_event_type := "unknown"]
+  }
   p[, `:=`(sample_id = sample, mapper = mapper, dataset = dataset, run = run)]
   p[, .(n_reads = .N,
         n_correct = sum(mapping_status == "correct"),
         n_incorrect = sum(mapping_status == "incorrect"),
         n_unmapped = sum(mapping_status == "unmapped")),
-    by = .(sample_id, mapper, dataset, run, read_type, transcript_type, error_type)]
+    by = .(sample_id, mapper, dataset, run, read_type, transcript_type, as_event_type, error_type)]
 }
 
 message("Parsing truth headers"); truth1 <- parse_truth_headers(opt$`truth-read1`)
