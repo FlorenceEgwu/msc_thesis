@@ -76,18 +76,19 @@ rule export_ground_truth_gtf_table:
         """
 
 # Merge outputs
-rule merge_ground_truth_coordinates:
-    input:
-        COORDINATE_TARGETS
-    output:
-        ALL_COORDINATES_TARGET
-    threads: 1
-    resources:
-        mem_mb = 8000
-    run:
-        import pandas as pd
-        df = pd.concat([pd.read_csv(f, sep="\t") for f in input], ignore_index=True)
-        df.to_csv(output[0], sep="\t", index=False)
+#rule merge_ground_truth_coordinates:
+#   input:
+#        COORDINATE_TARGETS
+#    output:
+#       ALL_COORDINATES_TARGET
+#    threads: 1
+#    resources:
+#        mem_mb = 8000
+#    shell:
+#        r"""
+#        mkdir -p "$(dirname {output})"
+#        awk 'FNR == 1 && NR != 1 {{ next }} {{ print }}' {input} > {output}
+#        """
 
 rule merge_ground_truth_standard_summary:
     input:

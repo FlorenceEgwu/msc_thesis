@@ -1,13 +1,8 @@
 #!/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
-  library(optparse)
-  library(GenomicRanges)
-  library(GenomicAlignments)
-  library(Rsamtools)
-  library(data.table)
-  library(stringr)
-  library(Biostrings)
+  library(optparse); library(GenomicAlignments); library(Rsamtools)
+  library(data.table); library(stringr); library(Biostrings)
 })
 
 opt <- parse_args(OptionParser(option_list = list(
@@ -25,571 +20,331 @@ opt <- parse_args(OptionParser(option_list = list(
   make_option("--out-stratified", type = "character")
 )))
 
-write_tsv <- function(df, path) {
-  fwrite(as.data.table(df), file = path, sep = "\t", quote = FALSE, na = "NA")
-}
-
 parse_truth_headers <- function(path) {
-  truth_reads <- readBStringSet(path, format = "fasta")
-  headers <- names(truth_reads)
-  read_lengths <- width(truth_reads)
-  rm(truth_reads)
+  seqlens <- fasta.seqlengths(path)
+  headers <- names(seqlens)
+  m1 <- str_match(headers, "mate1:([0-9]+)-([0-9]+)")
+  m2 <- str_match(headers, "mate2:([0-9]+)-([0-9]+)")
 
-  mate1_range <- str_match(headers, "mate1:([0-9]+)-([0-9]+)")
-  mate2_range <- str_match(headers, "mate2:([0-9]+)-([0-9]+)")
-  mate1_start_only <- as.integer(str_match(headers, "mate1Start:([0-9]+)")[, 2])
-  mate2_start_only <- as.integer(str_match(headers, "mate2Start:([0-9]+)")[, 2])
-
-  mate1_start <- as.integer(mate1_range[, 2])
-  mate1_end <- as.integer(mate1_range[, 3])
-  mate2_start <- as.integer(mate2_range[, 2])
-  mate2_end <- as.integer(mate2_range[, 3])
-
-  needs_mate1_end <- is.na(mate1_end) & !is.na(mate1_start_only)
-  needs_mate2_end <- is.na(mate2_end) & !is.na(mate2_start_only)
-
-  mate1_start[is.na(mate1_start)] <- mate1_start_only[is.na(mate1_start)]
-  mate2_start[is.na(mate2_start)] <- mate2_start_only[is.na(mate2_start)]
-  mate1_end[needs_mate1_end] <- mate1_start_only[needs_mate1_end] + read_lengths[needs_mate1_end] - 1L
-  mate2_end[needs_mate2_end] <- mate2_start_only[needs_mate2_end] + read_lengths[needs_mate2_end] - 1L
-
-  truth_dt <- data.table(header = headers)[
-    ,
-    `:=`(
-      read_id = str_match(header, "^([^/]+)")[, 2],
-      transcript_id = str_match(header, "/([^|;]+)\\|")[, 2],
-      gene_id = str_match(header, "\\|([^;]+)")[, 2],
-      mate1_start = mate1_start,
-      mate1_end = mate1_end,
-      mate2_start = mate2_start,
-      mate2_end = mate2_end
-    )
-  ][
-    ,
-    .(read_id, transcript_id, gene_id, mate1_start, mate1_end, mate2_start, mate2_end)
-  ]
-
-  unique(truth_dt, by = "read_id")
+  # Polyester quirk: mate2_start in header is shifted by +1 vs actual read start.
+  # Subtract 1 so both mates represent 1-based inclusive 100-bp ranges.
+  unique(data.table(
+    read_id = sub("/.*$", "", headers),
+    transcript_id = str_match(headers, "/([^|;]+)\\|")[, 2],
+    gene_id = str_match(headers, "\\|([^;]+)")[, 2],
+    mate1_start = as.integer(m1[, 2]),
+    mate1_end = as.integer(m1[, 3]),
+    mate2_start = as.integer(m2[, 2]) - 1L,
+    mate2_end = as.integer(m2[, 3])
+  ), by = "read_id")
 }
 
-load_gtf_tables <- function(gtf_table_file) {
+load_flat_exons <- function(gtf_table_file) {
   exon_dt <- fread(gtf_table_file, sep = "\t")
-  setDT(exon_dt)
-
-  exon_dt[
-    ,
-    `:=`(
-      start = as.integer(start),
-      end = as.integer(end),
-      exon_number = as.integer(exon_number),
-      exon_count = as.integer(exon_count)
-    )
-  ]
+  exon_dt[, `:=`(
+    start = as.integer(start), end = as.integer(end),
+    exon_number = as.integer(exon_number),
+    exon_count = as.integer(exon_count),
+    seqnames = as.character(seqnames),
+    strand = as.character(strand)
+  )]
   setorder(exon_dt, transcript_id, exon_number, start)
+  exon_dt[, w := end - start + 1L]
+  exon_dt[, cum_end := cumsum(w), by = transcript_id]
+  exon_dt[, cum_start := cum_end - w + 1L][, w := NULL]
 
-  tx_dt <- unique(
-    exon_dt[, .(transcript_id, gene_id, exon_count, transcript_type)],
-    by = c("transcript_id", "gene_id", "exon_count", "transcript_type")
-  )
-
+  tx_dt <- unique(exon_dt[, .(transcript_id, gene_id, exon_count, transcript_type)])
   list(exons = exon_dt, transcripts = tx_dt)
 }
 
-build_transcript_index <- function(exons) {
-  tx_exons <- split(exons, by = "transcript_id", keep.by = FALSE)
-
-  lapply(tx_exons, function(tx_dt) {
-    widths <- tx_dt$end - tx_dt$start + 1L
-    cum_end <- cumsum(widths)
-    cum_start <- cum_end - widths + 1L
-
-    tx_dt <- copy(tx_dt)[
-      ,
-      `:=`(
-        cum_start = cum_start,
-        cum_end = cum_end
-      )
-    ]
-
-    list(
-      exons = tx_dt[, .(seqnames, start, end, strand, exon_number, cum_start, cum_end)]
-    )
-  })
-}
-
 bam_to_table <- function(bam_file) {
-  bam <- scanBam(
-    bam_file,
-    param = ScanBamParam(what = c("qname", "rname", "pos", "cigar", "strand", "flag", "mapq"))
-  )[[1]]
+  bam <- scanBam(bam_file,
+    param = ScanBamParam(what = c("qname", "rname", "pos", "cigar", "flag")))[[1]]
 
-  bam_dt <- data.table(
+  data.table(
     qname = bam$qname,
-    read_id = str_match(bam$qname, "^([^/]+)")[, 2],
+    read_id = sub("/.*$", "", bam$qname),
     rname = as.character(bam$rname),
     pos = bam$pos,
     cigar = bam$cigar,
-    strand = as.character(bam$strand),
     flag = bam$flag,
-    mapq = bam$mapq
-  )
-
-  bam_dt[
-    ,
-    `:=`(
-      is_unmapped = bitwAnd(flag, 4L) != 0L,
-      is_secondary = bitwAnd(flag, 256L) != 0L,
-      is_supplementary = bitwAnd(flag, 2048L) != 0L,
-      is_read1 = bitwAnd(flag, 64L) != 0L,
-      is_read2 = bitwAnd(flag, 128L) != 0L,
-      is_spliced_observed = str_detect(cigar, "N")
-    )
-  ]
-
-  bam_dt
-}
-
-attach_truth <- function(bam_dt, truth1, truth2) {
-  truth1_dt <- copy(truth1)[, .(read_id, transcript_id, gene_id, mate1_start, mate1_end)]
-  truth2_dt <- copy(truth2)[, .(read_id, mate2_start, mate2_end)]
-
-  merged_dt <- merge(copy(bam_dt), truth1_dt, by = "read_id", all.x = TRUE, sort = FALSE)
-  merged_dt <- merge(merged_dt, truth2_dt, by = "read_id", all.x = TRUE, sort = FALSE)
-
-  merged_dt[
-    ,
-    `:=`(
-      true_tx_start = fifelse(is_read1, mate1_start, fifelse(is_read2, mate2_start, NA_integer_)),
-      true_tx_end = fifelse(is_read1, mate1_end, fifelse(is_read2, mate2_end, NA_integer_))
-    )
-  ]
-
-  merged_dt
-}
-
-tx_to_blocks <- function(tx_start, tx_end, tx_info) {
-  if (is.null(tx_info) || is.na(tx_start) || is.na(tx_end)) {
-    return(NULL)
-  }
-
-  tx_exons <- tx_info$exons
-  keep <- vector("list", nrow(tx_exons))
-  keep_idx <- 0L
-
-  for (i in seq_len(nrow(tx_exons))) {
-    s <- max(tx_start, tx_exons$cum_start[i])
-    e <- min(tx_end, tx_exons$cum_end[i])
-    if (s > e) {
-      next
-    }
-
-    off_s <- s - tx_exons$cum_start[i]
-    off_e <- e - tx_exons$cum_start[i]
-
-    if (tx_exons$strand[i] == "+") {
-      gstart <- tx_exons$start[i] + off_s
-      gend <- tx_exons$start[i] + off_e
-    } else {
-      gstart <- tx_exons$end[i] - off_e
-      gend <- tx_exons$end[i] - off_s
-    }
-
-    keep_idx <- keep_idx + 1L
-    keep[[keep_idx]] <- list(
-      seqnames = tx_exons$seqnames[i],
-      start = min(gstart, gend),
-      end = max(gstart, gend)
-    )
-  }
-
-  if (keep_idx == 0L) {
-    return(NULL)
-  }
-
-  rbindlist(keep[seq_len(keep_idx)])
-}
-
-summarize_blocks <- function(blocks) {
-  if (is.null(blocks) || nrow(blocks) == 0L) {
-    return(list(
-      chr = NA_character_,
-      ranges = NA_character_,
-      n = 0L,
-      start = NA_integer_,
-      end = NA_integer_,
-      junction_count = 0L,
-      junction_key = "",
-      block_key = ""
-    ))
-  }
-
-  junctions <- if (nrow(blocks) < 2L) character() else paste0(blocks$end[-nrow(blocks)], ">", blocks$start[-1])
-  range_key <- paste0(blocks$seqnames, ":", blocks$start, "-", blocks$end, collapse = ";")
-
-  list(
-    chr = blocks$seqnames[[1]],
-    ranges = range_key,
-    n = nrow(blocks),
-    start = min(blocks$start),
-    end = max(blocks$end),
-    junction_count = length(junctions),
-    junction_key = paste(junctions, collapse = ";"),
-    block_key = range_key
+    is_unmapped = bitwAnd(bam$flag, 4L)    != 0L,
+    is_secondary = bitwAnd(bam$flag, 256L)  != 0L,
+    is_supplementary = bitwAnd(bam$flag, 2048L) != 0L,
+    is_read1 = bitwAnd(bam$flag, 64L)   != 0L,
+    is_read2 = bitwAnd(bam$flag, 128L)  != 0L,
+    is_spliced_observed = grepl("N", bam$cigar, fixed = TRUE)
   )
 }
 
-build_observed_cache <- function(unique_reads) {
-  mapped_reads <- unique_reads[
-    is_unmapped == FALSE,
-    .(rname, pos, cigar)
-  ]
-  mapped_reads <- unique(mapped_reads)
-  if (nrow(mapped_reads) == 0L) {
-    return(data.table(
-      rname = character(),
-      pos = integer(),
-      cigar = character(),
-      obs_blocks = list(),
-      obs_chr = character(),
-      obs_genomic_start = integer(),
-      obs_genomic_end = integer(),
-      obs_ranges = character(),
-      obs_block_count = integer(),
-      obs_junction_count = integer(),
-      obs_junction_key = character(),
-      obs_block_key = character()
-    ))
-  }
+# Compute genomic blocks from CIGAR for each unique (rname, pos, cigar) triple.
+build_observed_cache <- function(bam_tbl) {
+  mapped <- unique(bam_tbl[is_unmapped == FALSE, .(rname, pos, cigar)])
+  mapped[, pair_id := .I]
 
-  ranges_list <- cigarRangesAlongReferenceSpace(
-    cigar = mapped_reads$cigar,
-    pos = mapped_reads$pos,
-    ops = c("M", "=", "X"),
-    reduce.ranges = FALSE
-  )
+  rng <- cigarRangesAlongReferenceSpace(
+    cigar = mapped$cigar, pos = mapped$pos,
+    ops = c("M", "=", "X"), reduce.ranges = FALSE)
+  widths <- elementNROWS(rng)
 
-  blocks_list <- Map(function(chr, gr) {
-    if (!length(gr)) {
-      return(NULL)
-    }
+  flat <- data.table(
+    pair_id = rep(mapped$pair_id, widths),
+    seqnames = rep(mapped$rname,   widths),
+    start = as.integer(start(unlist(rng, use.names = FALSE))),
+    end = as.integer(end  (unlist(rng, use.names = FALSE))))
+  setorder(flat, pair_id, seqnames, start)
 
-    data.table(
-      seqnames = rep(as.character(chr), length(gr)),
-      start = start(gr),
-      end = end(gr)
-    )
-  }, mapped_reads$rname, ranges_list)
+  by_pair <- flat[, {
+    rk <- paste0(seqnames, ":", start, "-", end, collapse = ";")
+    jk <- if (.N > 1L) paste0(head(end, -1L), ">", tail(start, -1L), collapse = ";") else ""
+    .(obs_chr = seqnames[1L],
+      obs_genomic_start = min(start),   obs_genomic_end  = max(end),
+      obs_block_count = .N,           obs_ranges       = rk,
+      obs_junction_count = as.integer(.N - 1L),
+      obs_junction_key = jk,           obs_block_key    = rk)
+  }, by = pair_id]
 
-  summaries <- lapply(blocks_list, summarize_blocks)
+  by_key <- mapped[by_pair, on = "pair_id"][, pair_id := NULL]
 
-  mapped_reads[
-    ,
-    `:=`(
-      obs_blocks = blocks_list,
-      obs_chr = vapply(summaries, `[[`, character(1), "chr"),
-      obs_genomic_start = vapply(summaries, `[[`, integer(1), "start"),
-      obs_genomic_end = vapply(summaries, `[[`, integer(1), "end"),
-      obs_ranges = vapply(summaries, `[[`, character(1), "ranges"),
-      obs_block_count = vapply(summaries, `[[`, integer(1), "n"),
-      obs_junction_count = vapply(summaries, `[[`, integer(1), "junction_count"),
-      obs_junction_key = vapply(summaries, `[[`, character(1), "junction_key"),
-      obs_block_key = vapply(summaries, `[[`, character(1), "block_key")
-    )
-  ]
+  reps <- by_pair[, .(pair_id = pair_id[1L]), by = obs_block_key]
+  blocks_by_key <- merge(reps, flat, by = "pair_id", sort = FALSE)[,
+    .(obs_block_key, seqnames, start, end)]
+  list(by_key = by_key, blocks_by_key = blocks_by_key)
 }
 
-build_true_cache <- function(unique_reads, transcript_index) {
-  truth_reads <- unique_reads[
-    !is.na(transcript_id) & !is.na(true_tx_start) & !is.na(true_tx_end),
-    .(transcript_id, true_tx_start, true_tx_end)
-  ]
-  truth_reads <- unique(truth_reads)
+# Convert each unique (transcript_id, tx_start, tx_end) to genomic blocks via foverlaps
+# (vectorized; single pass across the whole truth set).
+build_true_cache <- function(truth_inputs, flat_exons) {
+  truth_reads <- unique(truth_inputs[!is.na(transcript_id) & !is.na(tx_start) & !is.na(tx_end)])
+  truth_reads[, pair_id := .I]
 
-  if (nrow(truth_reads) == 0L) {
-    return(data.table(
-      transcript_id = character(),
-      true_tx_start = integer(),
-      true_tx_end = integer(),
-      true_chr = character(),
-      true_genomic_start = integer(),
-      true_genomic_end = integer(),
-      true_ranges = character(),
-      true_block_count = integer(),
-      true_junction_count = integer(),
-      true_junction_key = character(),
-      true_block_key = character()
-    ))
-  }
+  tq  <- truth_reads[, .(transcript_id, start = tx_start, end = tx_end, pair_id)]
+  fex <- flat_exons[, .(transcript_id, seqnames, strand,
+                        gstart = start, gend = end, cum_start, cum_end)]
+  setnames(fex, c("cum_start", "cum_end"), c("start", "end"))
+  setkey(tq,  transcript_id, start, end)
+  setkey(fex, transcript_id, start, end)
 
-  blocks_list <- lapply(seq_len(nrow(truth_reads)), function(i) {
-    tx_id <- truth_reads$transcript_id[[i]]
-    tx_info <- transcript_index[[tx_id]]
-    tx_to_blocks(truth_reads$true_tx_start[[i]], truth_reads$true_tx_end[[i]], tx_info)
-  })
+  hits <- foverlaps(tq, fex, type = "any", nomatch = NULL)
+  setnames(hits, c("start", "end", "i.start", "i.end"),
+                 c("ex_cs", "ex_ce", "tx_s", "tx_e"))
 
-  summaries <- lapply(blocks_list, summarize_blocks)
+  hits[, `:=`(
+    off_s = pmax(tx_s, ex_cs) - ex_cs,
+    off_e = pmin(tx_e, ex_ce) - ex_cs
+  )]
+  hits[, `:=`(
+    blk_lo = pmin(fifelse(strand == "+", gstart + off_s, gend - off_e),
+                  fifelse(strand == "+", gstart + off_e, gend - off_s)),
+    blk_hi = pmax(fifelse(strand == "+", gstart + off_s, gend - off_e),
+                  fifelse(strand == "+", gstart + off_e, gend - off_s))
+  )]
+  setorder(hits, pair_id, seqnames, blk_lo)
 
-  truth_reads[
-    ,
-    `:=`(
-      true_chr = vapply(summaries, `[[`, character(1), "chr"),
-      true_genomic_start = vapply(summaries, `[[`, integer(1), "start"),
-      true_genomic_end = vapply(summaries, `[[`, integer(1), "end"),
-      true_ranges = vapply(summaries, `[[`, character(1), "ranges"),
-      true_block_count = vapply(summaries, `[[`, integer(1), "n"),
-      true_junction_count = vapply(summaries, `[[`, integer(1), "junction_count"),
-      true_junction_key = vapply(summaries, `[[`, character(1), "junction_key"),
-      true_block_key = vapply(summaries, `[[`, character(1), "block_key")
-    )
-  ]
+  summaries <- hits[, {
+    rk <- paste0(seqnames, ":", blk_lo, "-", blk_hi, collapse = ";")
+    jk <- if (.N > 1L) paste0(head(blk_hi, -1L), ">", tail(blk_lo, -1L), collapse = ";") else ""
+    .(true_chr = seqnames[1L],
+      true_genomic_start = min(blk_lo), true_genomic_end = max(blk_hi),
+      true_block_count = .N,          
+      true_ranges = rk,
+      true_junction_count = as.integer(.N - 1L),
+      true_junction_key = jk,          
+      true_block_key = rk)
+  }, by = pair_id]
+
+  truth_reads[summaries, on = "pair_id"][, pair_id := NULL]
 }
 
-blocks_overlap_transcript <- function(obs_blocks, transcript_exons) {
-  if (is.null(obs_blocks) || nrow(obs_blocks) == 0L || is.null(transcript_exons) || nrow(transcript_exons) == 0L) {
-    return(FALSE)
-  }
+# "correct_transcript": every observed block overlaps at least one exon of the candidate transcript.
+build_overlap_cache <- function(observed_cache, class_tbl, flat_exons) {
+  pairs <- unique(class_tbl[is_unmapped == FALSE & !is.na(transcript_id) & obs_block_key != "",
+                            .(transcript_id, obs_block_key)])
 
-  obs_dt <- copy(obs_blocks)[, obs_id := .I]
-  exon_dt <- copy(transcript_exons)[, .(seqnames, start, end)]
-  setkey(obs_dt, seqnames, start, end)
-  setkey(exon_dt, seqnames, start, end)
+  blocks_numbered <- copy(observed_cache$blocks_by_key)
+  blocks_numbered[, obs_id := seq_len(.N), by = obs_block_key]
+  exploded <- merge(pairs, blocks_numbered, by = "obs_block_key", allow.cartesian = TRUE)
+  fex <- flat_exons[, .(transcript_id, seqnames, start, end)]
+  setkey(fex, transcript_id, seqnames, start, end)
+  setkey(exploded, transcript_id, seqnames, start, end)
 
-  overlaps <- foverlaps(obs_dt, exon_dt, nomatch = 0L)
-  uniqueN(overlaps$obs_id) == nrow(obs_dt)
+  hits <- foverlaps(exploded, fex, type = "any", nomatch = NULL)
+  covered <- unique(hits[, .(transcript_id, obs_block_key, obs_id)])
+  covered_counts <- covered[, .N, by = .(transcript_id, obs_block_key)]
+  total_counts <- blocks_numbered[, .N, by = obs_block_key]
+
+  res <- copy(pairs)
+  res[total_counts, on = "obs_block_key", n_total   := N]
+  res[covered_counts, on = c("transcript_id", "obs_block_key"), n_covered := N]
+  res[is.na(n_covered), n_covered := 0L]
+  res[, .(transcript_id, obs_block_key, correct_transcript = n_covered == n_total)]
 }
 
-build_overlap_cache <- function(unique_reads, observed_cache, transcript_index) {
-  if (nrow(observed_cache) == 0L) {
-    return(data.table(
-      transcript_id = character(),
-      obs_block_key = character(),
-      correct_transcript = logical()
-    ))
-  }
+classify_mapping <- function(tbl, flat_exons, tx_tbl) {
+  tbl <- copy(tbl)[, .aln_id := .I]
+  observed_cache <- build_observed_cache(tbl)
 
-  obs_block_map <- observed_cache[
-    ,
-    .(obs_blocks = list(obs_blocks[[1]])),
-    by = obs_block_key
-  ]
-  overlap_inputs <- unique_reads[
-    is_unmapped == FALSE & !is.na(transcript_id),
-    .(transcript_id, obs_block_key)
-  ]
-  overlap_inputs <- unique(overlap_inputs)
-
-  if (nrow(overlap_inputs) == 0L) {
-    return(data.table(
-      transcript_id = character(),
-      obs_block_key = character(),
-      correct_transcript = logical()
-    ))
-  }
-
-  overlap_inputs <- merge(overlap_inputs, obs_block_map, by = "obs_block_key", all.x = TRUE, sort = FALSE)
-  overlap_inputs[
-    ,
-    correct_transcript := vapply(
-      seq_len(.N),
-      function(i) {
-        tx_info <- transcript_index[[transcript_id[[i]]]]
-        transcript_exons <- if (is.null(tx_info)) NULL else tx_info$exons
-        blocks_overlap_transcript(obs_blocks[[i]], transcript_exons)
-      },
-      logical(1)
-    )
-  ][
-    ,
-    .(transcript_id, obs_block_key, correct_transcript)
-  ]
-}
-
-classify_mapping <- function(tbl, exons, tx_tbl) {
-  transcript_index <- build_transcript_index(exons)
-  unique_reads <- unique(copy(tbl), by = "qname")
-  observed_cache <- build_observed_cache(unique_reads)
-  true_cache <- build_true_cache(unique_reads, transcript_index)
+  # Truth: compute for BOTH mates (Polyester randomizes orientation ~50/50).
+  true_cache <- build_true_cache(rbind(
+    tbl[!is.na(mate1_start), .(transcript_id, tx_start = mate1_start, tx_end = mate1_end)],
+    tbl[!is.na(mate2_start), .(transcript_id, tx_start = mate2_start, tx_end = mate2_end)]
+  ), flat_exons)
 
   class_tbl <- merge(
-    unique_reads[, .(qname, rname, pos, cigar, transcript_id, true_tx_start, true_tx_end, is_unmapped)],
-    observed_cache[, .(
-      rname, pos, cigar, obs_block_key, obs_junction_key, obs_chr,
-      obs_genomic_start, obs_genomic_end, obs_ranges, obs_block_count,
-      obs_junction_count
-    )],
-    by = c("rname", "pos", "cigar"),
-    all.x = TRUE,
-    sort = FALSE
-  )
+    tbl[, .(.aln_id, rname, pos, cigar, transcript_id,
+            mate1_start, mate1_end, mate2_start, mate2_end,
+            is_unmapped, is_spliced_observed)],
+    observed_cache$by_key,
+    by = c("rname", "pos", "cigar"), all.x = TRUE, sort = FALSE)
 
-  class_tbl <- merge(
-    class_tbl,
-    true_cache,
-    by = c("transcript_id", "true_tx_start", "true_tx_end"),
-    all.x = TRUE,
-    sort = FALSE
-  )
+  true_cols <- c("true_chr","true_genomic_start","true_genomic_end",
+                 "true_block_count","true_ranges","true_junction_count",
+                 "true_junction_key","true_block_key")
+  rename_for <- function(tc, prefix) {
+    out <- copy(tc)
+    setnames(out, true_cols, paste0(prefix, "_", sub("^true_", "", true_cols)))
+    out
+  }
 
-  class_tbl[
-    is.na(obs_block_key),
-    `:=`(
-      obs_block_key = "",
-      obs_junction_key = "",
-      obs_block_count = 0L,
-      obs_junction_count = 0L
-    )
-  ]
-  class_tbl[
-    is.na(true_block_key),
-    `:=`(
-      true_block_key = "",
-      true_junction_key = "",
-      true_block_count = 0L,
-      true_junction_count = 0L
-    )
-  ]
+  class_tbl <- merge(class_tbl, rename_for(true_cache, "m1"),
+    by.x = c("transcript_id","mate1_start","mate1_end"),
+    by.y = c("transcript_id","tx_start","tx_end"),
+    all.x = TRUE, sort = FALSE)
+  class_tbl <- merge(class_tbl, rename_for(true_cache, "m2"),
+    by.x = c("transcript_id","mate2_start","mate2_end"),
+    by.y = c("transcript_id","tx_start","tx_end"),
+    all.x = TRUE, sort = FALSE)
 
-  overlap_cache <- build_overlap_cache(class_tbl, observed_cache, transcript_index)
-  class_tbl <- merge(class_tbl, overlap_cache, by = c("transcript_id", "obs_block_key"), all.x = TRUE, sort = FALSE)
+  # Fill NAs with empty strings / zeros so equality tests are well-defined.
+  for (col in c("obs_block_key","obs_junction_key")) set(class_tbl, which(is.na(class_tbl[[col]])), col, "")
+  for (col in c("obs_block_count","obs_junction_count")) set(class_tbl, which(is.na(class_tbl[[col]])), col, 0L)
+  for (p in c("m1","m2")) {
+    for (col in paste0(p, c("_block_key","_junction_key"))) set(class_tbl, which(is.na(class_tbl[[col]])), col, "")
+    for (col in paste0(p, c("_block_count","_junction_count"))) set(class_tbl, which(is.na(class_tbl[[col]])), col, 0L)
+  }
+
+  overlap_cache <- build_overlap_cache(observed_cache, class_tbl, flat_exons)
+  class_tbl <- merge(class_tbl, overlap_cache,
+    by = c("transcript_id","obs_block_key"), all.x = TRUE, sort = FALSE)
   class_tbl[is.na(correct_transcript), correct_transcript := FALSE]
 
-  class_tbl[
-    ,
-    `:=`(
-      exact_structure = obs_block_key == true_block_key,
-      all_junctions_match = obs_junction_key == true_junction_key,
-      same_chr = !is.na(obs_chr) & !is.na(true_chr) & obs_chr == true_chr
-    )
-  ]
+  # Exact structure: obs matches EITHER mate's block layout. Pick matching mate's
+  # truth for output; if neither matches, prefer m1 (else m2) for reporting.
+  class_tbl[, `:=`(
+    exact_m1 = obs_block_key != "" & m1_block_key != "" & obs_block_key == m1_block_key,
+    exact_m2 = obs_block_key != "" & m2_block_key != "" & obs_block_key == m2_block_key
+  )]
+  class_tbl[, exact_structure := exact_m1 | exact_m2]
+  class_tbl[, use_m2 := (!exact_m1 & exact_m2) |
+                        (!exact_m1 & !exact_m2 & m1_block_key == "" & m2_block_key != "")]
+  for (field in c("chr","genomic_start","genomic_end","ranges","block_count",
+                  "block_key","junction_count","junction_key")) {
+    m1c <- paste0("m1_", field); m2c <- paste0("m2_", field); tgt <- paste0("true_", field)
+    class_tbl[, (tgt) := fifelse(use_m2, get(m2c), get(m1c))]
+  }
+  class_tbl[, `:=`(
+    all_junctions_match = obs_junction_key == true_junction_key,
+    same_chr            = !is.na(obs_chr) & !is.na(true_chr) & obs_chr == true_chr
+  )]
 
-  class_tbl <- class_tbl[
-    ,
-    .(
-      qname,
-      obs_chr,
-      true_chr,
-      obs_genomic_start,
-      obs_genomic_end,
-      true_genomic_start,
-      true_genomic_end,
-      obs_ranges,
-      true_ranges,
-      obs_block_count,
-      true_block_count,
-      true_junction_count,
-      obs_junction_count,
-      correct_transcript,
-      all_junctions_match,
-      exact_structure,
-      same_chr
-    )
-  ]
-
-  classified_dt <- merge(copy(tbl), tx_tbl, by = c("transcript_id", "gene_id"), all.x = TRUE, sort = FALSE)
-  classified_dt <- merge(classified_dt, class_tbl, by = "qname", all.x = TRUE, sort = FALSE)
+  classified_dt <- merge(tbl, tx_tbl, by = c("transcript_id","gene_id"),
+                         all.x = TRUE, sort = FALSE)
+  classified_dt <- merge(classified_dt,
+    class_tbl[, .(.aln_id, obs_chr, true_chr,
+                  obs_genomic_start, obs_genomic_end,
+                  true_genomic_start, true_genomic_end,
+                  obs_ranges, true_ranges,
+                  obs_block_count, true_block_count,
+                  true_junction_count, obs_junction_count,
+                  correct_transcript, all_junctions_match,
+                  exact_structure, same_chr)],
+    by = ".aln_id", all.x = TRUE, sort = FALSE)
+  classified_dt[, .aln_id := NULL]
 
   classified_dt[, read_type := fifelse(is_spliced_observed, "spliced", "simple")]
-  classified_dt[
-    ,
-    mapping_status := fcase(
-      is_unmapped, "unmapped",
-      is.na(transcript_id), "unknown_truth",
-      exact_structure, "correct",
-      default = "incorrect"
-    )
-  ]
-  classified_dt[
-    ,
-    error_type := fcase(
-      is_unmapped, "unmapped",
-      is.na(transcript_id), "unknown_truth",
-      exact_structure, "none",
-      read_type == "spliced" & correct_transcript & !all_junctions_match, "incorrect_junction",
-      correct_transcript, "incorrect_position_within_region",
-      !correct_transcript, "incorrect_position",
-      default = "unknown"
-    )
-  ]
-
+  classified_dt[, mapping_status := fcase(
+    is_unmapped, "unmapped",
+    is.na(transcript_id), "unknown_truth",
+    exact_structure, "correct",
+    default = "incorrect"
+  )]
+  classified_dt[, error_type := fcase(
+    is_unmapped, "unmapped",
+    is.na(transcript_id), "unknown_truth",
+    exact_structure, "none",
+    correct_transcript & (is_spliced_observed | true_junction_count > 0L) & !all_junctions_match,
+      "incorrect_junction",
+    correct_transcript, "incorrect_position_within_region",
+    !correct_transcript, "incorrect_position",
+    default = "unknown"
+  )]
   classified_dt
 }
 
 standard_summary <- function(tbl, sample, mapper, dataset, run) {
-  total <- nrow(tbl)
-  mapped <- tbl[, sum(!is_unmapped)]
-  unmapped <- tbl[, sum(is_unmapped)]
-  unique_aln <- tbl[!is_unmapped & !is_secondary & !is_supplementary, .N]
-  multi <- tbl[, .N, by = read_id][N > 1L, .N]
-
-  data.table(sample_id = sample,
-    mapper = mapper, dataset = dataset, run = run,
-    total_reads = total, mapped_reads = mapped, unmapped_reads = unmapped,
-    pct_mapped = 100 * mapped / total, pct_unmapped = 100 * unmapped / total,
-    approx_unique_alignments = unique_aln, reads_with_multiple_alignments = multi
-  )
+  primary <- tbl[is_secondary == FALSE & is_supplementary == FALSE]
+  n_tot <- primary[, uniqueN(paste(qname, is_read1))]
+  n_map <- primary[is_unmapped == FALSE, uniqueN(paste(qname, is_read1))]
+  n_unmap <- primary[is_unmapped == TRUE,  uniqueN(paste(qname, is_read1))]
+  n_multi <- tbl[is_unmapped == FALSE, .N, by = .(qname, is_read1)][N > 1L, .N]
+  
+  data.table(sample_id = sample, mapper = mapper, dataset = dataset, run = run,
+             total_reads = n_tot,
+             mapped_reads = n_map,
+             unmapped_reads = n_unmap,
+             pct_mapped = if (n_tot > 0) 100 * n_map / n_tot else NA_real_,
+             reads_with_multiple_alignments = n_multi)
 }
 
 ground_summary <- function(tbl, sample, mapper, dataset, run) {
-  total <- nrow(tbl)
-  correct <- tbl[mapping_status == "correct", .N]
-  incorrect <- tbl[mapping_status == "incorrect", .N]
-  unmapped <- tbl[mapping_status == "unmapped", .N]
-
-  precision <- if ((correct + incorrect) > 0) correct / (correct + incorrect) else NA_real_
-  recall <- if (total > 0) correct / total else NA_real_
-  f1 <- if (!is.na(precision) && !is.na(recall) && (precision + recall) > 0) {
-    2 * precision * recall / (precision + recall)
-  } else {
-    NA_real_
-  }
-
-  data.table(sample_id = sample, mapper = mapper,
-    dataset = dataset, run = run, total_reads = total, correct_reads = correct,
-    incorrect_reads = incorrect, unmapped_reads = unmapped,
-    accuracy = correct / total, precision = precision,
-    recall = recall, f1_score = f1)
+  p <- tbl[is_secondary == FALSE & is_supplementary == FALSE]
+  n_tot <- nrow(p)
+  n_cor <- p[mapping_status == "correct", .N]
+  n_incor <- p[mapping_status == "incorrect", .N]
+  n_unmap <- p[mapping_status == "unmapped", .N]
+  prec <- if (n_cor + n_incor > 0) n_cor / (n_cor + n_incor) else NA_real_
+  rec <- if (n_tot > 0) n_cor / n_tot  else NA_real_
+  f1 <- if (!is.na(prec) && !is.na(rec) && prec + rec > 0) 2*prec*rec/(prec+rec) else NA_real_
+  
+  data.table(sample_id = sample, mapper = mapper, dataset = dataset, run = run,
+             total_reads = n_tot,
+             correct_reads = n_cor,
+             incorrect_reads = n_incor,
+             unmapped_reads = n_unmap,
+             accuracy  = if (n_tot > 0) n_cor / n_tot else NA_real_,
+             precision = prec, recall = rec, f1_score = f1)
 }
 
 stratified_summary <- function(tbl, sample, mapper, dataset, run) {
-  summary_dt <- copy(tbl)
-  summary_dt[
-    ,
-    `:=`(
-      sample_id = sample, mapper = mapper,
-      dataset = dataset, run = run
-    )]
-
-  summary_dt[
-    ,
-    .(n_reads = .N,
-      n_correct = sum(mapping_status == "correct"),
-      n_incorrect = sum(mapping_status == "incorrect"),
-      n_unmapped = sum(mapping_status == "unmapped")
-    ),
-    by = .(sample_id, mapper, dataset, run, read_type, transcript_type, error_type)
-  ]
+  p <- tbl[is_secondary == FALSE & is_supplementary == FALSE]
+  p[, `:=`(sample_id = sample, mapper = mapper, dataset = dataset, run = run)]
+  p[, .(n_reads = .N,
+        n_correct = sum(mapping_status == "correct"),
+        n_incorrect = sum(mapping_status == "incorrect"),
+        n_unmapped = sum(mapping_status == "unmapped")),
+    by = .(sample_id, mapper, dataset, run, read_type, transcript_type, error_type)]
 }
 
-message("Parsing truth headers")
-truth1 <- parse_truth_headers(opt$`truth-read1`)
-truth2 <- parse_truth_headers(opt$`truth-read2`)
-
-message("Loading GTF table")
-gtf <- load_gtf_tables(opt$`gtf-table`)
-
-message("Reading BAM")
-bam_tbl <- bam_to_table(opt$bam)
+message("Parsing truth headers"); truth1 <- parse_truth_headers(opt$`truth-read1`)
+                                  truth2 <- parse_truth_headers(opt$`truth-read2`)
+message("Loading GTF table"); gtf <- load_flat_exons(opt$`gtf-table`)
+message("Reading BAM"); bam_tbl <- bam_to_table(opt$bam)
 
 message("Attaching truth metadata")
-full_tbl <- attach_truth(bam_tbl, truth1, truth2)
+full_tbl <- merge(bam_tbl,
+  truth1[, .(read_id, transcript_id, gene_id, mate1_start, mate1_end)],
+  by = "read_id", all.x = TRUE, sort = FALSE)
+full_tbl <- merge(full_tbl, truth2[, .(read_id, mate2_start, mate2_end)],
+  by = "read_id", all.x = TRUE, sort = FALSE)
 
 message("Classifying alignments")
 classified <- classify_mapping(full_tbl, gtf$exons, gtf$transcripts)
-classified[, `:=`(sample_id = opt$sample,mapper = opt$mapper,dataset = opt$dataset,run = opt$run)]
+classified[, `:=`(sample_id = opt$sample, mapper = opt$mapper,
+                  dataset = opt$dataset, run = opt$run)]
 
 message("Writing outputs")
-write_tsv(classified, opt$`out-coordinates`)
-write_tsv(standard_summary(bam_tbl, opt$sample, opt$mapper, opt$dataset, opt$run),opt$`out-standard`)
-write_tsv(ground_summary(classified, opt$sample, opt$mapper, opt$dataset, opt$run),opt$`out-ground`)
-write_tsv(stratified_summary(classified, opt$sample, opt$mapper, opt$dataset, opt$run), opt$`out-stratified`)
+fwrite(classified, opt$`out-coordinates`, sep = "\t", na = "NA", quote = FALSE)
+fwrite(standard_summary(classified, opt$sample, opt$mapper, opt$dataset, opt$run), opt$`out-standard`, sep = "\t", na = "NA", quote = FALSE)
+fwrite(ground_summary(classified, opt$sample, opt$mapper, opt$dataset, opt$run), opt$`out-ground`, sep = "\t", na = "NA", quote = FALSE)
+fwrite(stratified_summary(classified, opt$sample, opt$mapper, opt$dataset, opt$run), opt$`out-stratified`,  sep = "\t", na = "NA", quote = FALSE)
 message("Done")

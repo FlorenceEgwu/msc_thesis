@@ -11,17 +11,11 @@ supports local and Slurm (HPC) execution; assumes mapper/QC tools are pre-instal
 
 - config.yaml — central configuration (samples, references, parameters).
 
--envs/ — legacy conda environment specs (refs, star, hisat2, rmats, etc.) you can reuse if you decide to re-enable conda.
-
 - profiles/ — Snakemake profiles: local/ and slurm/.
 
 - rules/ — modular rule files (aligners, QC, post‑processing, splicing).
 
 - scripts/ — helper scripts (pre/post processing, plotting).
-
-- samples.tsv — sample sheet (IDs, groups/conditions, fastq paths or SRR accessions).
-
-- design.tsv — experimental design metadata to complement samples.tsv.
 
 - README.md — quickstart, requirements, and run commands.
 

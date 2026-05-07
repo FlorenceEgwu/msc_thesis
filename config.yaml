@@ -25,6 +25,7 @@ resources:
   hisat2_map_mem_mb: 12000
   star_index_mem_mb: 48000
   hisat2_index_mem_mb: 16000
+  ground_truth_mem_mb: 8000
 
 # Datasets
 datasets:
@@ -33,10 +34,10 @@ datasets:
     read2: "data/input/sim/polyester_design/dataset1/sample_{sample_id:02d}_2.fasta"
     sample_ids: [1,2,3,4,5,6,7,8,9,10]
     param_groups:
-      star_d1_mm2_int21:
+      star_d1_mm5_int21:
         mapper: "star"
         parameters:
-          --outFilterMultimapNmax: 2
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 21
       star_d1_mm10_int21:
         mapper: "star"
@@ -48,60 +49,90 @@ datasets:
         parameters:
           --outFilterMultimapNmax: 20
           --alignIntronMin: 21
-      star_d1_int21_mm10:
+      star_d1_mm5_int50:
         mapper: "star"
         parameters:
-          --alignIntronMin: 21
-          --outFilterMultimapNmax: 10
-      star_d1_int50_mm10:
-        mapper: "star"
-        parameters:
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 50
-          --outFilterMultimapNmax: 10
-      star_d1_int100_mm10:
+      star_d1_mm10_int50:
         mapper: "star"
         parameters:
+          --outFilterMultimapNmax: 5
+          --alignIntronMin: 50
+      star_d1_mm20_int50:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 20
+          --alignIntronMin: 50
+      star_d1_mm5_int100:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 100
+      star_d1_mm10_int100:
+        mapper: "star"
+        parameters:
           --outFilterMultimapNmax: 10
-      hisat2_d1_k2_int20:
+          --alignIntronMin: 100
+      star_d1_mm20_int100:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 20
+          --alignIntronMin: 100
+      hisat2_d1_mm5_int20:
         mapper: "hisat2"
         parameters: 
-          -k: 2
+          -k: 5
           --min-intronlen: 20
-      hisat2_d1_k10_int20:
+      hisat2_d1_mm10_int20:
         mapper: "hisat2"
         parameters: 
           -k: 10
           --min-intronlen: 20
-      hisat2_d1_k20_int20:
+      hisat2_d1_mm20_int20:
         mapper: "hisat2"
         parameters: 
           -k: 20
-          --min-intronlen: 20 
-      hisat2_d1_int20_k5:
-        mapper: "hisat2"
-        parameters: 
           --min-intronlen: 20
-          -k: 5
-      hisat2_d1_int50_k5:
+      hisat2_d1_mm5_int50:
         mapper: "hisat2"
         parameters: 
+          -k: 5
           --min-intronlen: 50
-          -k: 5
-      hisat2_d1_int100_k5:
+      hisat2_d1_mm10_int50:
         mapper: "hisat2"
         parameters: 
-          --min-intronlen: 100
+          -k: 10
+          --min-intronlen: 50
+      hisat2_d1_mm20_int50:
+        mapper: "hisat2"
+        parameters: 
+          -k: 20
+          --min-intronlen: 50
+      hisat2_d1_mm5_int100:
+        mapper: "hisat2"
+        parameters: 
           -k: 5
+          --min-intronlen: 100
+      hisat2_d1_mm10_int100:
+        mapper: "hisat2"
+        parameters: 
+          -k: 10
+          --min-intronlen: 100
+      hisat2_d1_mm20_int100:
+        mapper: "hisat2"
+        parameters: 
+          -k: 20
+          --min-intronlen: 100 
   sim_mouse_dataset2:
     read1: "data/input/sim/polyester_design/dataset2/sample_{sample_id:02d}_1.fasta"
     read2: "data/input/sim/polyester_design/dataset2/sample_{sample_id:02d}_2.fasta"
     sample_ids: [1,2,3,4,5,6,7,8,9,10]
     param_groups:
-      star_d2_mm2_int21:
+      star_d2_mm5_int21:
         mapper: "star"
         parameters:
-          --outFilterMultimapNmax: 2
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 21
       star_d2_mm10_int21:
         mapper: "star"
@@ -113,60 +144,90 @@ datasets:
         parameters:
           --outFilterMultimapNmax: 20
           --alignIntronMin: 21
-      star_d2_int21_mm10:
+      star_d2_mm5_int50:
         mapper: "star"
         parameters:
-          --alignIntronMin: 21
-          --outFilterMultimapNmax: 10
-      star_d2_int50_mm10:
-        mapper: "star"
-        parameters:
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 50
-          --outFilterMultimapNmax: 10
-      star_d2_int100_mm10:
+      star_d2_mm10_int50:
         mapper: "star"
         parameters:
+          --outFilterMultimapNmax: 5
+          --alignIntronMin: 50
+      star_d2_mm20_int50:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 20
+          --alignIntronMin: 50
+      star_d2_mm5_int100:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 100
+      star_d2_mm10_int100:
+        mapper: "star"
+        parameters:
           --outFilterMultimapNmax: 10
-      hisat2_d2_k2_int20:
+          --alignIntronMin: 100
+      star_d2_mm20_int100:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 20
+          --alignIntronMin: 100
+      hisat2_d2_mm5_int20:
         mapper: "hisat2"
         parameters: 
-          -k: 2
+          -k: 5
           --min-intronlen: 20
-      hisat2_d2_k10_int20:
+      hisat2_d2_mm10_int20:
         mapper: "hisat2"
         parameters: 
           -k: 10
           --min-intronlen: 20
-      hisat2_d2_k20_int20:
+      hisat2_d2_mm20_int20:
         mapper: "hisat2"
         parameters: 
           -k: 20
           --min-intronlen: 20
-      hisat2_d2_int20_k5:
+      hisat2_d2_mm5_int50:
         mapper: "hisat2"
         parameters: 
-          --min-intronlen: 20
           -k: 5
-      hisat2_d2_int50_k5:
-        mapper: "hisat2"
-        parameters: 
           --min-intronlen: 50
-          -k: 5
-      hisat2_d2_int100_k5:
+      hisat2_d2_mm10_int50:
         mapper: "hisat2"
         parameters: 
+          -k: 10
+          --min-intronlen: 50
+      hisat2_d2_mm20_int50:
+        mapper: "hisat2"
+        parameters: 
+          -k: 20
+          --min-intronlen: 50
+      hisat2_d2_mm5_int100:
+        mapper: "hisat2"
+        parameters: 
+          -k: 5   
           --min-intronlen: 100 
-          -k: 5
+      hisat2_d2_mm10_int100:
+        mapper: "hisat2"
+        parameters: 
+          -k: 10
+          --min-intronlen: 100
+      hisat2_d2_mm20_int100:
+        mapper: "hisat2"
+        parameters: 
+          -k: 20
+          --min-intronlen: 100 
   sim_mouse_dataset3:
     read1: "data/input/sim/polyester_design/dataset3/sample_{sample_id:02d}_1.fasta"
     read2: "data/input/sim/polyester_design/dataset3/sample_{sample_id:02d}_2.fasta"
     sample_ids: [1,2,3,4,5,6,7,8,9,10]
     param_groups:
-      star_d3_mm2_int21:
+      star_d3_mm5_int21:
         mapper: "star"
         parameters:
-          --outFilterMultimapNmax: 2
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 21
       star_d3_mm10_int21:
         mapper: "star"
@@ -178,51 +239,81 @@ datasets:
         parameters:
           --outFilterMultimapNmax: 20
           --alignIntronMin: 21
-      star_d3_int21_mm10:
+      star_d3_mm5_int50:
         mapper: "star"
         parameters:
-          --alignIntronMin: 21
-          --outFilterMultimapNmax: 10
-      star_d3_int50_mm10:
-        mapper: "star"
-        parameters:
+          --outFilterMultimapNmax: 5
           --alignIntronMin: 50
-          --outFilterMultimapNmax: 10
-      star_d3_int100_mm10:
+      star_d3_mm10_int50:
         mapper: "star"
         parameters:
-          --alignIntronMin: 100
           --outFilterMultimapNmax: 10
-      hisat2_d3_k2_int20:
+          --alignIntronMin: 50
+      star_d3_mm20_int50:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 20
+          --alignIntronMin: 50
+      star_d3_mm5_int100:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 5
+          --alignIntronMin: 100
+      star_d3_mm10_int100:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 10
+          --alignIntronMin: 100
+      star_d3_mm20_int100:
+        mapper: "star"
+        parameters:
+          --outFilterMultimapNmax: 20
+          --alignIntronMin: 100
+      hisat2_d3_mm5_int20:
         mapper: "hisat2"
         parameters: 
-          -k: 2
+          -k: 5
           --min-intronlen: 20
-      hisat2_d3_k10_int20:
+      hisat2_d3_mm10_int20:
         mapper: "hisat2"
         parameters: 
           -k: 10
           --min-intronlen: 20
-      hisat2_d3_k20_int20:
+      hisat2_d3_mm20_int20:
         mapper: "hisat2"
         parameters: 
           -k: 20
           --min-intronlen: 20
-      hisat2_d3_int20_k5:
+      hisat2_d3_mm5_int50:
         mapper: "hisat2"
         parameters: 
-          --min-intronlen: 20
           -k: 5
-      hisat2_d3_int50_k5:
-        mapper: "hisat2"
-        parameters: 
           --min-intronlen: 50
-          -k: 5
-      hisat2_d3_int100_k5:
+      hisat2_d3_mm10_int50:
         mapper: "hisat2"
         parameters: 
-          --min-intronlen: 100
+          -k: 10
+          --min-intronlen: 50
+      hisat2_d3_mm20_int50:
+        mapper: "hisat2"
+        parameters: 
+          -k: 20
+          --min-intronlen: 50
+      hisat2_d3_mm5_int100:
+        mapper: "hisat2"
+        parameters: 
           -k: 5
+          --min-intronlen: 100
+      hisat2_d3_mm10_int100:
+        mapper: "hisat2"
+        parameters: 
+          -k: 10
+          --min-intronlen: 100
+      hisat2_d3_mm20_int100:
+        mapper: "hisat2"
+        parameters: 
+          -k: 20
+          --min-intronlen: 100
 
 
 tools:
@@ -233,6 +324,3 @@ tools:
 
 ground_truth:
   complex_exon_threshold: 2
-
-resources:
-  ground_truth_mem_mb: 8000
