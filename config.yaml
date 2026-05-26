@@ -59,7 +59,7 @@ datasets:
       star_d1_mm10_int50:
         mapper: "star"
         parameters:
-          --outFilterMultimapNmax: 5
+          --outFilterMultimapNmax: 10
           --alignIntronMin: 50
       star_d1_mm20_int50:
         mapper: "star"
@@ -154,7 +154,7 @@ datasets:
       star_d2_mm10_int50:
         mapper: "star"
         parameters:
-          --outFilterMultimapNmax: 5
+          --outFilterMultimapNmax: 10
           --alignIntronMin: 50
       star_d2_mm20_int50:
         mapper: "star"
@@ -208,19 +208,19 @@ datasets:
           --min-intronlen: 50
       hisat2_d2_mm5_int100:
         mapper: "hisat2"
-        parameters: 
-          -k: 5   
-          --min-intronlen: 100 
+        parameters:
+          -k: 5
+          --min-intronlen: 100
       hisat2_d2_mm10_int100:
         mapper: "hisat2"
-        parameters: 
+        parameters:
           -k: 10
           --min-intronlen: 100
       hisat2_d2_mm20_int100:
         mapper: "hisat2"
-        parameters: 
+        parameters:
           -k: 20
-          --min-intronlen: 100 
+          --min-intronlen: 100
   sim_mouse_dataset3:
     read1: "data/input/sim/polyester_design/dataset3/sample_{sample_id:02d}_1.fasta"
     read2: "data/input/sim/polyester_design/dataset3/sample_{sample_id:02d}_2.fasta"
@@ -303,17 +303,17 @@ datasets:
           --min-intronlen: 50
       hisat2_d3_mm5_int100:
         mapper: "hisat2"
-        parameters: 
+        parameters:
           -k: 5
           --min-intronlen: 100
       hisat2_d3_mm10_int100:
         mapper: "hisat2"
-        parameters: 
+        parameters:
           -k: 10
           --min-intronlen: 100
       hisat2_d3_mm20_int100:
         mapper: "hisat2"
-        parameters: 
+        parameters:
           -k: 20
           --min-intronlen: 100
 
@@ -323,7 +323,8 @@ tools:
   hisat2_dir: "~/pl0296-02/project_data/hisat2-2.2.1"
   samtools_dir: "~/pl0296-02/project_data/samtools-1.19.2"
   stringtie_dir: "~/pl0296-02/project_data/stringtie"
-  rmats_bin: "rmats.py"
+  Miniforge3: "~/pl0296-02/project_data/miniforge3"
+  rmats_bin: "~/pl0296-02/project_data/miniforge3/bin/rmats.py"
   python_bin: "python"
 
 ground_truth:

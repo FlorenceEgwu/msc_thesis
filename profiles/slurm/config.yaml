@@ -1,5 +1,5 @@
 # profiles/slurm/config.yaml
-# Snakemake SLURM configuration for local execution with conda support
+# Snakemake SLURM configuration for local execution within a Slurm allocation.
 
 jobs: 40
 use-conda: false

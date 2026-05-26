@@ -1,58 +1,82 @@
-## Purpose
+# RNA-Seq Snakemake Pipeline
 
-Snakemake-based RNA‑Seq pipeline for the thesis: "Enhanced RNA‑Seq data analysis workflow in molecular biotechnology:
-Parameter refinements of mappers for improved accuracy in alternative splicing detection".
-Focus on STAR and HISAT2 mapping with rMATS for alternative splicing; 
-supports local and Slurm (HPC) execution; assumes mapper/QC tools are pre-installed (env specs kept only for reference only).
+This repository implements a Snakemake-based RNA-Seq workflow for the thesis project "Enhanced RNA-Seq data analysis workflow in molecular biotechnology: Parameter refinements of mappers for improved accuracy in alternative splicing detection." It supports STAR and HISAT2 mapping, ground-truth mapping summaries, and rMATS splicing analysis.
 
-## High-level Structure
+## Repository layout
 
-- Snakefile — main workflow entry point and rules includes.
+- `Snakefile` — main workflow entrypoint.
+- `config.yaml` — central pipeline configuration.
+- `profiles/` — Snakemake profiles for `local` and `slurm` execution.
+- `rules/` — modular Snakemake rules for indexing, mapping, ground truth, and rMATS.
+- `scripts/` — helper scripts used by rules.
+- `data/` — input data, simulated reads, and pipeline outputs.
+- `envs/` — reference environment specs for tools.
 
-- config.yaml — central configuration (samples, references, parameters).
+## Requirements
 
-- profiles/ — Snakemake profiles: local/ and slurm/.
+- Snakemake ≥ 7.32
+- STAR
+- HISAT2
+- samtools
+- rMATS
+- R with required packages for helper scripts
+- Optional: FastQC, MultiQC, StringTie
 
-- rules/ — modular rule files (aligners, QC, post‑processing, splicing).
+## Configuration
 
-- scripts/ — helper scripts (pre/post processing, plotting).
+Primary configuration lives in `config.yaml`.
 
-- README.md — quickstart, requirements, and run commands.
+Important configuration sections:
 
+- `ref`, `gtf` — genome FASTA and annotation GTF.
+- `star_index_dir`, `hisat2_index_prefix` — index target locations.
+- `outdir`, `tmpdir` — output and temporary directories.
+- `datasets` — defines sample templates and parameter groups.
+- `tools` — tool directory overrides used by `Snakefile`.
+- `rmats` — rMATS pipeline options and sample grouping.
 
-## Quickstart
+### Notes
 
-### Requirements
-- Snakemake ≥7.32 plus system-installed STAR, HISAT2, samtools, FastQC, MultiQC, StringTie, and rMATS (conda/mamba optional if you wish to revive the env specs).
+- `profiles/local/config.yaml` and `profiles/slurm/config.yaml` both set `use-conda: false`, so the pipeline relies on externally installed tools or configured tool paths.
+- `submit_pipeline.sh` installs `snakemake` and `rMATS` into `~/pl0296-02/project_data/miniforge3` if missing, but the main workflow expects tool binaries to be available via `config.yaml` or `$PATH`.
+- If `rmats.truth_table` is empty, the pipeline generates the truth table automatically from the provided simulated design files.
 
-### Setup
-Ensure the required tools are on your `$PATH` (e.g., via modules or manual installs noted in `rules/refs.smk`).
+## Running locally
 
-## Local run (example)
-`snakemake --profile profiles/local -j 4`
+From the repository root:
 
-## Slurm (HPC)
+```bash
+snakemake --profile profiles/local -j 4
+```
 
-`snakemake --profile profiles/slurm --rerun-incomplete`
+## Running on Slurm
 
-## Expected Inputs
+Use the Slurm submission script:
 
-- FASTQ files or accession-driven fetch (as defined in samples.tsv).
+```bash
+sbatch submit_pipeline.sh
+```
 
-- Reference genome + annotation (configured via config.yaml and envs/refs.yaml).
+The script will:
+- initialize Miniforge in `~/pl0296-02/project_data/miniforge3`
+- install `snakemake` and `rMATS` if needed
+- run the workflow under the `profiles/slurm` profile
 
-- Design matrix (design.tsv) for downstream DE/AS analyses.
+## Inputs and outputs
 
-## Outputs (typical)
+### Inputs
 
-- Aligner-specific BAMs/metrics (STAR/HISAT2).
+- Simulated FASTQ files under `data/input/sim/polyester_design/`
+- Reference data under `reference/`
+- Sample design templates in `config.yaml`
 
-- Splicing event tables and summaries (rMATS).
+### Outputs
 
-- Ground-truth mapping summaries with divisions by read type, transcript complexity,
-  mapping-error type, and inferred AS-event class.
+- Aligner-specific BAMs and index files under `data/results/mapping/`
+- Ground-truth coordinate and summary tables under `data/results/ground_truth/`
+- rMATS outputs and merged summaries under `data/results/rmats/`
+- Snakemake logs under `logs/`
 
-- rMATS per-case significant-event tables and merged summaries for simulated
-  datasets 2 and 3.
+## Fixes and validation
 
-- QC reports and intermediate logs.
+The repository has been reviewed for configuration mismatches, and the known `config.yaml` issues were corrected so that STAR parameter groups match their names and HISAT2 group definitions have consistent formatting.

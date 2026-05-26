@@ -43,6 +43,11 @@ if [[ ! -x "${MINIFORGE_BIN}/snakemake" ]]; then
   "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda snakemake -y > /dev/null 2>&1
 fi
 
+# Install rMATS into the same Miniforge if missing.
+if [[ ! -x "${MINIFORGE_BIN}/rmats.py" ]]; then
+  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda rmats -y > /dev/null 2>&1
+fi
+
 # ==== RUN SNAKEMAKE PIPELINE ====
 echo "🚀 Starting Snakemake RNA-Seq mapping pipeline..."
 echo "Job ID: $SLURM_JOB_ID"
