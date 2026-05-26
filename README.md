@@ -37,9 +37,9 @@ Important configuration sections:
 
 ### Notes
 
-- `profiles/local/config.yaml` and `profiles/slurm/config.yaml` both set `use-conda: false`, so the pipeline relies on externally installed tools or configured tool paths.
-- `submit_pipeline.sh` installs `snakemake` and `rMATS` into `~/pl0296-02/project_data/miniforge3` if missing, but the main workflow expects tool binaries to be available via `config.yaml` or `$PATH`.
-- If `rmats.truth_table` is empty, the pipeline generates the truth table automatically from the provided simulated design files.
+### Requirements
+- Snakemake ≥7.32 plus system-installed STAR, HISAT2, samtools, FastQC, MultiQC, and StringTie.
+- On Slurm, the submit scripts install missing Snakemake and rMATS executables into `~/pl0296-02/project_data/miniforge3`, and `config.yaml` points the rMATS rule at that same Miniforge location.
 
 ## Running locally
 
