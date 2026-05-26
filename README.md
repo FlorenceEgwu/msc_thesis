@@ -23,7 +23,8 @@ supports local and Slurm (HPC) execution; assumes mapper/QC tools are pre-instal
 ## Quickstart
 
 ### Requirements
-- Snakemake ≥7.32 plus system-installed STAR, HISAT2, samtools, FastQC, MultiQC, StringTie, and rMATS (conda/mamba optional if you wish to revive the env specs).
+- Snakemake ≥7.32 plus system-installed STAR, HISAT2, samtools, FastQC, MultiQC, and StringTie.
+- On Slurm, the submit scripts install missing Snakemake and rMATS executables into `~/pl0296-02/project_data/miniforge3`, and `config.yaml` points the rMATS rule at that same Miniforge location.
 
 ### Setup
 Ensure the required tools are on your `$PATH` (e.g., via modules or manual installs noted in `rules/refs.smk`).
