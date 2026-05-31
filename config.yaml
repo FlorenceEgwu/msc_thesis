@@ -325,16 +325,22 @@ tools:
   stringtie_dir: "~/pl0296-02/project_data/stringtie"
   Miniforge3: "~/pl0296-02/project_data/miniforge3"
   rmats_bin: "~/pl0296-02/project_data/miniforge3/bin/rmats.py"
+  suppa2_bin: "~/pl0296-02/project_data/miniforge3/bin/suppa.py"
   python_bin: "python"
 
 ground_truth:
   complex_exon_threshold: 2
 
+as_events:
+  datasets:
+    - dataset2
+    - dataset3
+
 rmats:
   enabled: true
   datasets:
-    - sim_mouse_dataset2
-    - sim_mouse_dataset3
+    - dataset2
+    - dataset3
   condition_a:
     name: Cond1
     sample_ids: [1, 2, 3, 4, 5]

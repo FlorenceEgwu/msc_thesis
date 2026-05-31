@@ -73,6 +73,11 @@ if [[ ! -x "${MINIFORGE_BIN}/rmats.py" ]]; then
   "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda rmats -y > /dev/null 2>&1
 fi
 
+# Install SUPPA2 into the same Miniforge if missing.
+if [[ ! -x "${MINIFORGE_BIN}/suppa.py" ]]; then
+  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda suppa -y > /dev/null 2>&1
+fi
+
 cd "${REPO_DIR}"
 
 OUTDIR="data/results"

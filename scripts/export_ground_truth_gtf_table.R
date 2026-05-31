@@ -11,6 +11,7 @@ suppressPackageStartupMessages({
 opt <- parse_args(OptionParser(option_list = list(
   make_option("--gtf", type = "character"),
   make_option("--complex-exon-threshold", type = "integer", default = 2),
+  make_option("--as-event-tables", type = "character", default = ""),
   make_option("--out", type = "character")
 )))
 
@@ -23,6 +24,10 @@ read_selected_transcript_ids <- function() {
     "data/input/selected_transcripts/transcripts_2tx.fa",
     "data/input/selected_transcripts/transcripts_3tx.fa"
   )
+  fasta_paths <- fasta_paths[file.exists(fasta_paths)]
+  if (length(fasta_paths) == 0) {
+    return(character())
+  }
 
   headers <- unlist(
     lapply(fasta_paths, function(path) names(readBStringSet(path, format = "fasta"))),
@@ -34,6 +39,34 @@ read_selected_transcript_ids <- function() {
 }
 
 selected_transcript_ids <- read_selected_transcript_ids()
+
+read_as_event_tables <- function(paths_arg) {
+  paths_arg <- ifelse(is.null(paths_arg) || is.na(paths_arg), "", paths_arg)
+  paths <- strsplit(paths_arg, ",", fixed = TRUE)[[1]]
+  paths <- paths[nzchar(paths) & file.exists(paths)]
+  if (length(paths) == 0) {
+    return(tibble(gene_id = character(), transcript_id = character(),
+                  suppa2_as_event_type = character(), suppa2_event_ids = character(),
+                  as_event_source = character()))
+  }
+
+  bind_rows(lapply(paths, read.delim, sep = "\t", stringsAsFactors = FALSE, check.names = FALSE)) %>%
+    filter(!is.na(transcript_id), transcript_id != "") %>%
+    mutate(
+      gene_id = as.character(gene_id),
+      transcript_id = as.character(transcript_id),
+      as_event_type = coalesce(na_if(as_event_type, ""), "unknown"),
+      event_ids = coalesce(event_ids, ""),
+      as_event_source = coalesce(na_if(as_event_source, ""), "SUPPA2")
+    ) %>%
+    group_by(gene_id, transcript_id) %>%
+    summarise(
+      suppa2_as_event_type = paste(sort(unique(as_event_type)), collapse = ";"),
+      suppa2_event_ids = paste(sort(unique(event_ids[event_ids != ""])), collapse = ";"),
+      as_event_source = paste(sort(unique(as_event_source)), collapse = ";"),
+      .groups = "drop"
+    )
+}
 
 intron_key <- function(starts, ends, strand) {
   if (length(starts) < 2) {
@@ -111,24 +144,40 @@ tx_tbl <- exon_tbl %>%
   count(transcript_id, gene_id, name = "exon_count") %>%
   mutate(transcript_type = if_else(exon_count <= opt$`complex-exon-threshold`, "easy", "complex"))
 
-as_tbl <- exon_tbl %>%
+heuristic_as_tbl <- exon_tbl %>%
   group_by(gene_id) %>%
   group_modify(function(.x, .y) {
     tx_ids <- unique(.x$transcript_id)
     if (length(tx_ids) < 2) {
-      return(tibble(transcript_id = tx_ids, as_event_type = "single_transcript"))
+      return(tibble(transcript_id = tx_ids, heuristic_as_event_type = "single_transcript"))
     }
     if (length(tx_ids) > 2) {
-      return(tibble(transcript_id = tx_ids, as_event_type = "multi_transcript_gene"))
+      return(tibble(transcript_id = tx_ids, heuristic_as_event_type = "multi_transcript_gene"))
     }
     tx_a <- .x %>% filter(transcript_id == tx_ids[1]) %>% arrange(start, end)
     tx_b <- .x %>% filter(transcript_id == tx_ids[2]) %>% arrange(start, end)
     event_type <- classify_pair_event(tx_a, tx_b)
-    tibble(transcript_id = tx_ids, as_event_type = event_type)
+    tibble(transcript_id = tx_ids, heuristic_as_event_type = event_type)
   }) %>%
   ungroup()
 
+external_as_tbl <- read_as_event_tables(opt$`as-event-tables`)
+
 exon_tbl %>%
   left_join(tx_tbl, by = c("transcript_id", "gene_id")) %>%
-  left_join(as_tbl, by = c("gene_id", "transcript_id")) %>%
+  left_join(heuristic_as_tbl, by = c("gene_id", "transcript_id")) %>%
+  left_join(external_as_tbl, by = c("gene_id", "transcript_id")) %>%
+  mutate(
+    as_event_type = if_else(
+      !is.na(suppa2_as_event_type) & suppa2_as_event_type != "",
+      suppa2_as_event_type,
+      heuristic_as_event_type
+    ),
+    as_event_source = if_else(
+      !is.na(suppa2_as_event_type) & suppa2_as_event_type != "",
+      as_event_source,
+      "heuristic"
+    ),
+    suppa2_event_ids = if_else(is.na(suppa2_event_ids), "", suppa2_event_ids)
+  ) %>%
   write_tsv(opt$out)

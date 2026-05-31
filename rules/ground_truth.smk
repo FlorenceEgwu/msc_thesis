@@ -52,7 +52,8 @@ rule mapping_ground_truth_per_sample:
 
 rule export_ground_truth_gtf_table:
     input:
-        gtf=REF_GTF
+        gtf=REF_GTF,
+        as_events=as_event_table_targets()
     output:
         GROUND_TRUTH_GTF_TABLE_TARGET
     threads: 1
@@ -61,7 +62,8 @@ rule export_ground_truth_gtf_table:
     params:
         complex_exon_threshold=lambda wc: int(
             config.get("ground_truth", {}).get("complex_exon_threshold", 3)
-        )
+        ),
+        as_event_tables=lambda wc, input: ",".join(input.as_events)
     log:
         "logs/ground_truth/gtf_table.log"
     shell:
@@ -71,6 +73,7 @@ rule export_ground_truth_gtf_table:
         Rscript scripts/export_ground_truth_gtf_table.R \
           --gtf {input.gtf} \
           --complex-exon-threshold {params.complex_exon_threshold} \
+          --as-event-tables "{params.as_event_tables}" \
           --out {output} \
           > {log} 2>&1
         """
