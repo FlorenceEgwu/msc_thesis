@@ -6,7 +6,6 @@
 .github/
 
 # Snakemake files
-Snakefile
 .snakemake/
 
 # General files
@@ -29,4 +28,3 @@ screenlog.*
 work/
 results/
 tmp/
-scripts/result_analysis/

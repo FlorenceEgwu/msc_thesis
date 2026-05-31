@@ -270,7 +270,7 @@ We are focus on 2 parameters with 3 possible options.
 In STAR they are:
 
 - `outFilterMultimapNmax` with values 5, 10, 20
-- `alignIntronMin` with values 20 50 100
+- `alignIntronMin` with values 21 50 100
 
 In Hisat2 they are:
 

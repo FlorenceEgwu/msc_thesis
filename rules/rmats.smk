@@ -12,6 +12,7 @@ RMATS_MIN_ABS_INC_DIFF = float(RMATS_CFG.get("min_abs_inc_level_difference", 0.0
 RMATS_NOVEL_SS = str(RMATS_CFG.get("novel_ss", "false")).lower() in {"1", "true", "yes", "y"}
 RMATS_VARIABLE_READ_LENGTH = str(RMATS_CFG.get("variable_read_length", "false")).lower() in {"1", "true", "yes", "y"}
 RMATS_TRUTH_TABLE = RMATS_TRUTH_TABLE_TARGET
+RMATS_TRUTH_GENES_TABLE = RMATS_CFG.get("truth_genes_table") or f"{OUTDIR}/rmats/simulation_truth_genes.tsv"
 RMATS_MEM_MB = resource_mb("rmats_mem_mb", 32000)
 RMATS_SUMMARY_MEM_MB = resource_mb("rmats_summary_mem_mb", 4000)
 
@@ -32,17 +33,19 @@ if not RMATS_CFG.get("truth_table"):
         input:
             rmats_truth_design_files()
         output:
-            RMATS_TRUTH_TABLE
+            transcripts=RMATS_TRUTH_TABLE,
+            genes=RMATS_TRUTH_GENES_TABLE
         params:
             design_args=lambda wc, input: " ".join(f"--design {path}" for path in input)
         log:
             "logs/rmats/simulation_truth.log"
         shell:
             r"""
-            mkdir -p "$(dirname {output})" "$(dirname {log})"
+            mkdir -p "$(dirname {output.transcripts})" "$(dirname {log})"
             {PYTHON_BIN} scripts/export_rmats_truth.py \
               {params.design_args} \
-              --out {output} \
+              --out {output.transcripts} \
+              --out-genes {output.genes} \
               > {log} 2>&1
             """
 
@@ -104,8 +107,10 @@ rule rmats_run:
           --gtf {input.gtf} \
           --od {params.od} \
           --tmp {params.tmp} \
+          -t paired \
           --readLength {params.read_length} \
           --libType {params.libtype} \
+          --allow-clipping \
           --nthread {threads} \
           --tstat {threads} \
           {params.extra} \
@@ -117,7 +122,10 @@ rule rmats_run:
 rule rmats_summarize_case:
     input:
         done=OUTDIR + "/rmats/{dataset}/{mapper}/{param_group}/rmats.done",
-        truth=RMATS_TRUTH_TABLE,
+        truth_genes=RMATS_TRUTH_GENES_TABLE,
+        truth_tx=RMATS_TRUTH_TABLE,
+        suppa2_table=lambda wc: f"{OUTDIR}/as_events/{dataset_short_name(wc.dataset)}/as_event_table.tsv",
+        suppa2_events=lambda wc: f"{OUTDIR}/as_events/{dataset_short_name(wc.dataset)}/as_event_table_per_event.tsv",
     output:
         significant=OUTDIR + "/rmats/{dataset}/{mapper}/{param_group}/significant_events.tsv",
         summary=OUTDIR + "/rmats/{dataset}/{mapper}/{param_group}/summary.tsv",
@@ -141,7 +149,10 @@ rule rmats_summarize_case:
           --min-abs-inc-diff {params.min_abs_inc_diff} \
           --significant-out {output.significant} \
           --summary-out {output.summary} \
-          --truth-table "{input.truth}" \
+          --truth-table "{input.truth_genes}" \
+          --per-transcript-truth "{input.truth_tx}" \
+          --suppa2-table "{input.suppa2_table}" \
+          --suppa2-events "{input.suppa2_events}" \
           > {log} 2>&1
         """
 
@@ -155,7 +166,7 @@ rule rmats_merge_summaries:
         r"""
         mkdir -p "$(dirname {output})"
         if [[ "{input}" == "" ]]; then
-          printf 'dataset\tmapper\tparam_group\tevent_type\ttotal_events\tsignificant_events\tsignificant_genes\ttruth_supported_events\ttruth_supported_genes\n' > {output}
+          printf 'dataset\tmapper\tparam_group\tevent_type\ttotal_events\tsignificant_events\tsignificant_genes\tevents_isoform_switch\tevents_single_shift\tevents_co_directional\tevents_null_gene\tevents_unknown_gene\ttruth_supported_events\ttruth_supported_genes\tevents_suppa2_type_present\tevents_suppa2_type_absent\tevents_suppa2_no_annotation\tevents_direction_match\tevents_direction_mismatch\tevents_direction_indeterminate\tevents_direction_na\n' > {output}
         else
           awk 'FNR==1 && NR!=1 {{next}} {{print}}' {input} > {output}
         fi

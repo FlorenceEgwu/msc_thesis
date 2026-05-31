@@ -26,6 +26,8 @@ STAR_DIR = os.path.expanduser(TOOL_CFG.get("star_dir", "~/pl0296-02/project_data
 HISAT2_DIR = os.path.expanduser(TOOL_CFG.get("hisat2_dir", "~/pl0296-02/project_data/hisat2-2.2.1"))
 SAMTOOLS_DIR = os.path.expanduser(TOOL_CFG.get("samtools_dir", "~/pl0296-02/project_data/samtools-1.19.2"))
 STRINGTIE_DIR = os.path.expanduser(TOOL_CFG.get("stringtie_dir", "~/pl0296-02/project_data/stringtie"))
+PYTHON_BIN = os.path.expanduser(TOOL_CFG.get("python_bin", "python"))
+SUPPA_BIN = os.path.expanduser(TOOL_CFG.get("suppa2_bin", TOOL_CFG.get("suppa_bin", "suppa.py")))
 
 # default mapping parameters with defaults that can be overridden by sample config
 TUNED_PARAMS = config.get("tuned_parameters_defaults", {}) or {}
@@ -172,6 +174,36 @@ ALL_GROUND_TRUTH_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_ground_truth_summa
 ALL_STRATIFIED_SUMMARY_TARGET = f"{OUTDIR}/ground_truth/all_stratified_summary.tsv"
 GROUND_TRUTH_GTF_TABLE_TARGET = f"{OUTDIR}/ground_truth/gtf_exons.tsv"
 
+ANALYSIS_DONE = f"{OUTDIR}/analysis/.done"
+
+MAPPER_QC_TARGETS = [
+    f"{OUTDIR}/mapper_qc/{sample_mapper(s).lower()}/{sample_param_group(s)}/{s}.mapper_qc.tsv"
+    for s in SAMPLE_IDS
+]
+ALL_MAPPER_QC_TARGET = f"{OUTDIR}/mapper_qc/all_mapper_qc.tsv"
+
+# AS-event helpers for SUPPA2 annotation on datasets with two transcripts per gene.
+AS_EVENT_CFG = config.get("as_events", {}) or {}
+AS_EVENT_DATASETS = AS_EVENT_CFG.get("datasets", ["dataset2", "dataset3"]) or []
+
+def dataset_short_name(dataset: str) -> str:
+    return dataset.replace("sim_mouse_", "")
+
+def as_event_fasta(dataset: str) -> str:
+    return f"data/input/selected_transcripts/transcripts_{dataset_short_name(dataset).replace('dataset', '')}tx.fa"
+
+def as_event_table_target(dataset: str) -> str:
+    return f"{OUTDIR}/as_events/{dataset_short_name(dataset)}/as_event_table.tsv"
+
+def as_event_table_targets():
+    return [as_event_table_target(dataset) for dataset in AS_EVENT_DATASETS]
+
+def as_event_per_event_table_target(dataset: str) -> str:
+    return f"{OUTDIR}/as_events/{dataset_short_name(dataset)}/as_event_table_per_event.tsv"
+
+def as_event_per_event_table_targets():
+    return [as_event_per_event_table_target(dataset) for dataset in AS_EVENT_DATASETS]
+
 # rMATS helpers for differential alternative-splicing analysis on datasets 2/3.
 RMATS_CFG = config.get("rmats", {}) or {}
 RMATS_ENABLED = str(RMATS_CFG.get("enabled", True)).lower() in {"1", "true", "yes", "y"}
@@ -217,7 +249,7 @@ def rmats_all_summary_target():
 def rmats_truth_design_files():
     dataset_names = sorted(RMATS_DATASETS)
     return [
-        f"data/input/sim/polyester_design/{dataset.replace('sim_mouse_', '')}/transcript_design.tsv"
+        f"data/input/sim/polyester_design/{dataset_short_name(dataset)}/transcript_design.tsv"
         for dataset in dataset_names
     ]
 
@@ -246,8 +278,11 @@ def sample_design_target():
 include: "rules/refs.smk"
 include: "rules/mapping.smk"
 include: "rules/sample_design.smk"
+include: "rules/as_events.smk"
 include: "rules/ground_truth.smk"
 include: "rules/rmats.smk"
+include: "rules/mapper_qc.smk"
+include: "rules/analysis.smk"
 
 rule all:
     input:
@@ -258,6 +293,8 @@ rule all:
         hisat2_bam_targets(),
         hisat2_bai_targets(),
         sample_design_target(),
+        as_event_table_targets(),
+        as_event_per_event_table_targets(),
         GROUND_TRUTH_GTF_TABLE_TARGET,
         COORDINATE_TARGETS,
         STANDARD_SUMMARY_TARGETS,
@@ -268,3 +305,6 @@ rule all:
         ALL_GROUND_TRUTH_SUMMARY_TARGET,
         ALL_STRATIFIED_SUMMARY_TARGET,
         rmats_targets(),
+        MAPPER_QC_TARGETS,
+        ALL_MAPPER_QC_TARGET,
+        ANALYSIS_DONE,
