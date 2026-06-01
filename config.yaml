@@ -333,14 +333,14 @@ ground_truth:
 
 as_events:
   datasets:
-    - dataset2
-    - dataset3
+    - sim_mouse_dataset2
+    - sim_mouse_dataset3
 
 rmats:
   enabled: true
   datasets:
-    - dataset2
-    - dataset3
+    - sim_mouse_dataset2
+    - sim_mouse_dataset3
   condition_a:
     name: Cond1
     sample_ids: [1, 2, 3, 4, 5]
