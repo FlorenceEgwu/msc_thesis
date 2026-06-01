@@ -8,6 +8,7 @@ Classifies each significant event along three axes:
 """
 
 import argparse
+import sys
 from pathlib import Path
 import pandas as pd
 
@@ -97,8 +98,6 @@ def summarize_event(args, event_type, gene_truth, transcript_truth,
     sig = df[(fdr_num <= args.fdr) & (inc_num.abs() >= args.min_abs_inc_diff)].copy()
     sig = sig.assign(**case)
     gene_id_col = sig["GeneID"].fillna("") if "GeneID" in sig.columns else pd.Series("", index=sig.index)
-    if "geneSymbol" in sig.columns:
-        gene_id_col = gene_id_col.where(gene_id_col != "", sig["geneSymbol"].fillna(""))
     sig["gene_id"] = gene_id_col
     sig["event_truth_class"] = sig["gene_id"].map(gene_truth).map(EVENT_CLASS_BY_GENE_CLASS).fillna("unknown_gene")
     sig["gene_truth_class"] = sig["gene_id"].map(gene_truth).fillna("")
@@ -144,7 +143,15 @@ def main():
     dataset_short = args.dataset.replace("sim_mouse_", "")
 
     gene_df = load_tsv(args.truth_table, dataset_short)
-    gene_col = next((c for c in ("gene_id", "GeneID", "geneSymbol") if c in gene_df.columns), None)
+    if args.truth_table and gene_df.empty:
+        print(
+            f"WARNING: truth table is empty after filtering for dataset '{dataset_short}' "
+            f"(raw dataset arg: '{args.dataset}'). "
+            "All significant events will be classified as unknown_gene. "
+            "Check that sim_mouse_ prefix stripping and dataset name match the 'dataset' column in the truth TSV.",
+            file=sys.stderr,
+        )
+    gene_col = next((c for c in ("gene_id", "GeneID") if c in gene_df.columns), None)
     if "gene_truth_class" not in gene_df.columns and not gene_df.empty:
         gene_df["gene_truth_class"] = "single_shift"
     gene_truth = (gene_df.set_index(gene_col)["gene_truth_class"].fillna("single_shift").to_dict()

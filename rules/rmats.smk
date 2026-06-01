@@ -107,8 +107,10 @@ rule rmats_run:
           --gtf {input.gtf} \
           --od {params.od} \
           --tmp {params.tmp} \
+          -t paired \
           --readLength {params.read_length} \
           --libType {params.libtype} \
+          --allow-clipping \
           --nthread {threads} \
           --tstat {threads} \
           {params.extra} \
