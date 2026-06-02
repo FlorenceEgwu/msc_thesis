@@ -27,7 +27,7 @@ HISAT2_DIR = os.path.expanduser(TOOL_CFG.get("hisat2_dir", "~/pl0296-02/project_
 SAMTOOLS_DIR = os.path.expanduser(TOOL_CFG.get("samtools_dir", "~/pl0296-02/project_data/samtools-1.19.2"))
 STRINGTIE_DIR = os.path.expanduser(TOOL_CFG.get("stringtie_dir", "~/pl0296-02/project_data/stringtie"))
 PYTHON_BIN = os.path.expanduser(TOOL_CFG.get("python_bin", "python"))
-SUPPA_BIN = os.path.expanduser(TOOL_CFG.get("suppa2_bin", TOOL_CFG.get("suppa_bin", "suppa.py")))
+SUPPA_BIN = os.path.expanduser(TOOL_CFG.get("suppa_bin", "~/pl0296-02/project_data/aszabelska/conda-envs/suppa2/bin/suppa.py"))
 
 # default mapping parameters with defaults that can be overridden by sample config
 TUNED_PARAMS = config.get("tuned_parameters_defaults", {}) or {}

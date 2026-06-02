@@ -112,7 +112,7 @@ rule rmats_run:
           --libType {params.libtype} \
           --allow-clipping \
           --nthread {threads} \
-          --tstat {threads} \
+          --tstat 4 \
           {params.extra} \
           > {log} 2>&1
         touch {output.done}
