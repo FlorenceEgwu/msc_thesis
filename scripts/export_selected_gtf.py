@@ -36,7 +36,10 @@ def main():
     selected = gtf[tx.isin(tx_ids) | ((gtf["feature"] == "gene") & gene.isin(gene_ids))]
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    selected.to_csv(args.out, sep="\t", header=False, index=False)
+    joined = selected[GTF_COLUMNS[0]].astype(str)
+    for column in GTF_COLUMNS[1:]:
+        joined = joined.str.cat(selected[column].astype(str), sep="\t")
+    Path(args.out).write_text(joined.str.cat(sep="\n") + "\n" if len(joined) else "")
 
 
 if __name__ == "__main__":

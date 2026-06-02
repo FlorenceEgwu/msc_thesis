@@ -37,17 +37,12 @@ conda activate base
 
 # Install snakemake only if it is missing from the existing environment.
 if [[ ! -x "${MINIFORGE_BIN}/snakemake" ]]; then
-  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda snakemake -y > /dev/null 2>&1
+  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda snakemake -y
 fi
 
 # Install rMATS into the same Miniforge if missing.
 if [[ ! -x "${MINIFORGE_BIN}/rmats.py" ]]; then
-  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda rmats -y > /dev/null 2>&1
-fi
-
-# Install SUPPA2 into the same Miniforge if missing.
-if [[ ! -x "${MINIFORGE_BIN}/suppa.py" ]]; then
-  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda suppa -y > /dev/null 2>&1
+  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda rmats -y
 fi
 
 # ==== DRY-RUN ====

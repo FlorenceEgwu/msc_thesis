@@ -25,7 +25,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: sbatch submit_single_sample.sh <sample_name>"
-  echo "Example: sbatch submit_single_sample.sh hisat2_d3_k20_int20_10"
+  echo "Example: "
   exit 1
 fi
 
@@ -65,17 +65,12 @@ eval "$(${MINIFORGE_BIN}/conda shell.bash hook)"
 conda activate base
 
 if [[ ! -x "${MINIFORGE_BIN}/snakemake" ]]; then
-  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda snakemake -y > /dev/null 2>&1
+  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda snakemake -y
 fi
 
 # Install rMATS into the same Miniforge if missing.
 if [[ ! -x "${MINIFORGE_BIN}/rmats.py" ]]; then
-  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda rmats -y > /dev/null 2>&1
-fi
-
-# Install SUPPA2 into the same Miniforge if missing.
-if [[ ! -x "${MINIFORGE_BIN}/suppa.py" ]]; then
-  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda suppa -y > /dev/null 2>&1
+  "${MINIFORGE_BIN}/mamba" install -c conda-forge -c bioconda rmats -y
 fi
 
 cd "${REPO_DIR}"

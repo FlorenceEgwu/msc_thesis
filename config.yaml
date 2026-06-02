@@ -325,7 +325,7 @@ tools:
   stringtie_dir: "~/pl0296-02/project_data/stringtie"
   Miniforge3: "~/pl0296-02/project_data/miniforge3"
   rmats_bin: "~/pl0296-02/project_data/miniforge3/bin/rmats.py"
-  suppa2_bin: "~/pl0296-02/project_data/miniforge3/bin/suppa.py"
+  suppa_bin: "~/pl0296-02/project_data/aszabelska/conda-envs/suppa2/bin/suppa.py"
   python_bin: "python"
 
 ground_truth:
