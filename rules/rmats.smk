@@ -100,6 +100,9 @@ rule rmats_run:
         "logs/rmats/{dataset}/{mapper}/{param_group}/rmats.log"
     shell:
         r"""
+        # Clear stale *.rmats prep files so rMATS post doesn't see duplicate BAMs.
+        rm -rf "{params.tmp}" "{params.od}"
+
         mkdir -p "{params.od}" "{params.tmp}" "$(dirname {log})"
         {RMATS_BIN} \
           --b1 {input.b1} \
