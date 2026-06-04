@@ -114,7 +114,3 @@ The script will:
 - Ground-truth coordinate and summary tables under `data/results/ground_truth/`
 - rMATS outputs and merged summaries under `data/results/rmats/`
 - Snakemake logs under `logs/`
-
-## Fixes and validation
-
-The repository has been reviewed for configuration mismatches, and the known `config.yaml` issues were corrected so that STAR parameter groups match their names and HISAT2 group definitions have consistent formatting.

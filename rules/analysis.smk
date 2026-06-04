@@ -19,7 +19,7 @@ rule analysis_report:
     shell:
         r"""
         mkdir -p "{params.outdir}" "$(dirname {log})"
-        {PYTHON_BIN} scripts/analysis/make_plots.py \
+        Rscript scripts/analysis/make_report.R \
           --ground-summary {input.ground} \
           --stratified-summary {input.strat} \
           --standard-summary {input.standard} \

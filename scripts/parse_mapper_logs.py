@@ -113,6 +113,12 @@ def parse_star_log(path):
             out["unmapped_reads"] = int(round(total * out["pct_unmapped"] / 100))
     for unmap_key in unmap_keys:
         out.pop(unmap_key, None)
+
+    if out.get("pct_too_many_loci") is not None:
+        out["pct_multi_mapped"] = (out.get("pct_multi_mapped") or 0) + out["pct_too_many_loci"]
+        if out.get("too_many_loci_reads") is not None:
+            out["multi_mapped_reads"] = (out.get("multi_mapped_reads") or 0) + out["too_many_loci_reads"]
+
     return out
 
 
@@ -149,7 +155,10 @@ def parse_hisat2_log(path):
         if total:
             out["uniquely_mapped_reads"] = int(round(total * out["pct_uniquely_mapped"] / 100))
     if out.get("pct_concordant_multi") is not None:
-        out["pct_multi_mapped"] = out["pct_concordant_multi"]
+        # Include discordant pairs so multi-mapped covers all non-uniquely
+        # mapped reads, similar to STAR's multi-mapped category.
+        disc = out.get("pct_discordant_unique") or 0
+        out["pct_multi_mapped"] = out["pct_concordant_multi"] + disc
         if total:
             out["multi_mapped_reads"] = int(round(total * out["pct_multi_mapped"] / 100))
     return out
