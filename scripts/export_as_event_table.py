@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit two SUPPA2-derived AS event tables for one dataset.
+"""Emit two SUPPA2-derived AS event tables for each dataset.
 
 --out         per-transcript aggregation: one row per (gene_id, transcript_id)
               with the union of event types it participates in (used by the
