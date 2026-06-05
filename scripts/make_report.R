@@ -9,6 +9,13 @@
 #   --rmats-summary        rMATS per-case summary (optional)
 #   --outdir               output directory; plots/ and tables/ created under it
 
+local({
+  pkgs <- c("dplyr", "tidyr", "ggplot2")
+  missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
+  if (length(missing))
+    install.packages(missing, repos = "https://cloud.r-project.org", quiet = TRUE)
+})
+
 suppressPackageStartupMessages({
   library(dplyr)
   library(tidyr)
@@ -164,7 +171,7 @@ grouped_bar <- function(df, index, columns, values, title, ylabel, path,
     theme_minimal(base_size = 12, base_family = THESIS_FONT) +
     theme(
       text                  = element_text(family = THESIS_FONT),
-      axis.text.x           = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 10),
+      axis.text.x           = element_text(angle = 45, hjust = 1, vjust = 1, size = 10),
       axis.text.y           = element_text(size = 10),
       panel.grid.major.x    = element_blank(),
       plot.caption          = element_text(hjust = 0.5, size = 12, margin = margin(t = 10)),
