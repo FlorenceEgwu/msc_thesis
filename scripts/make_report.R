@@ -9,6 +9,13 @@
 #   --rmats-summary        rMATS per-case summary (optional)
 #   --outdir               output directory; plots/ and tables/ created under it
 
+local({
+  pkgs <- c("dplyr", "tidyr", "ggplot2")
+  missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
+  if (length(missing))
+    install.packages(missing, repos = "https://cloud.r-project.org", quiet = TRUE)
+})
+
 suppressPackageStartupMessages({
   library(dplyr)
   library(tidyr)
