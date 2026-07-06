@@ -22,9 +22,9 @@ tmpdir: "tmp"
 # workflow runs inside one Slurm allocation.
 resources:
   star_map_mem_mb: 48000
-  hisat2_map_mem_mb: 12000
+  hisat2_map_mem_mb: 48000
   star_index_mem_mb: 48000
-  hisat2_index_mem_mb: 16000
+  hisat2_index_mem_mb: 48000
   ground_truth_mem_mb: 8000
   rmats_mem_mb: 32000
   rmats_summary_mem_mb: 4000
