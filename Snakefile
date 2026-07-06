@@ -80,7 +80,7 @@ def star_mm_arg(sample: str) -> str:
     return str(mapper_param(sample, "--outFilterMultimapNmax", 10))
 
 def star_intron_min_arg(sample: str) -> str:
-    return str(mapper_param(sample, "--alignIntronMin", 20))
+    return str(mapper_param(sample, "--alignIntronMin", 21))
 
 def hisat2_k_arg(sample: str) -> str:
     return str(mapper_param(sample, "-k", 5))

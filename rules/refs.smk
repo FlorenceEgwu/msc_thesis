@@ -13,7 +13,7 @@ rule star_index:
     params:
         star_dir = STAR_DIR,
         genome_dir = STAR_INDEX_TARGET,
-        sjdbOverhang = 149,
+        sjdbOverhang = 99,
         genomeSAindexNbases = 8
     log:
         "logs/refs/star_index.log"
@@ -42,7 +42,8 @@ rule star_index:
 # HISAT2 Genome Index
 rule hisat2_index:
     input:
-        fasta = REF_FASTA
+        fasta = REF_FASTA,
+        gtf = REF_GTF
     output:
         touch(HISAT2_INDEX_DONE)
     threads: 8
@@ -63,5 +64,15 @@ rule hisat2_index:
         fi
         
         mkdir -p $(dirname {params.index_prefix})
-        {params.hisat2_dir}/hisat2-build -p {threads} {input.fasta} {params.index_prefix} > {log} 2>&1
+
+        # Extract annotation for splice-site-aware index (mirrors STAR --sjdbGTFfile)
+        {params.hisat2_dir}/hisat2_extract_splice_sites.py {input.gtf} \
+            > $(dirname {params.index_prefix})/splicesites.txt 2>> {log}
+        {params.hisat2_dir}/hisat2_extract_exons.py {input.gtf} \
+            > $(dirname {params.index_prefix})/exons.txt 2>> {log}
+
+        {params.hisat2_dir}/hisat2-build -p {threads} \
+            --ss $(dirname {params.index_prefix})/splicesites.txt \
+            --exon $(dirname {params.index_prefix})/exons.txt \
+            {input.fasta} {params.index_prefix} >> {log} 2>&1
         """
